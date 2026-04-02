@@ -1,9 +1,11 @@
 #include "MusicPlayer.h"
+#include "App.h"
 #include "ToneGenerator.h"
+#include "print.h"
 #include "sioTinyTimber.h"
 
+extern App app;
 extern SysIO sio0;
-
 extern ToneGenerator toneGenerator;
 
 const int MELODY[32] = {0, 2, 4, 0, 0, 2, 4, 0, 4, 5, 7, 4,  5, 7, 7,  9,
@@ -21,11 +23,28 @@ int playTone(MusicPlayer *self, int melodyIndex) {
   if (self->stopped) {
     return 0;
   }
-  int period = getPeriod(MELODY[melodyIndex] + self->key);
-  BEFORE(USEC(100), &toneGenerator, generateTone,
-         period); // Start tone generation
+  int period = getPeriod(MELODY[melodyIndex], self->key);
+  if (checkTurn(melodyIndex))
+    BEFORE(USEC(100), &toneGenerator, generateTone, period);
   int nextNote = durationToUsec(self->tempo, DURATIONS[melodyIndex]);
+  scheduleToggleLed(self, melodyIndex, nextNote);
+  if (checkTurn(melodyIndex))
+    SEND(USEC(nextNote) - MSEC(50), MSEC(50), &toneGenerator, stopTone, NULL);
+  SEND(USEC(nextNote), USEC(50), self, playTone, (melodyIndex + 1) % 32);
+  return 0;
+}
 
+char checkTurn(int melodyIndex) {
+  int order = SYNC(&app, getOrder, NODE_ID);
+  int nodes = SYNC(&app, getNodesCount, NODE_ID);
+  if (order == melodyIndex % nodes) {
+    return 1;
+  }
+  print("Skipping note %d\n", melodyIndex);
+  return 0;
+}
+
+void scheduleToggleLed(MusicPlayer *self, int melodyIndex, int nextNote) {
   // WE ALSO SCHEDULE LIGHT TOGGLES HERE
   // IF DURATION IS 2, WE SCHEDULE 4 TOGGLES
   // IF DURATION IS 4, WE SCHEDULE 2 TOGGLES
@@ -35,12 +54,6 @@ int playTone(MusicPlayer *self, int melodyIndex) {
   for (int i = 0; i < numToggles; i++) {
     AFTER(USEC(toggleInterval * i), self, toggleLight, NULL);
   }
-
-  SEND(USEC(nextNote) - MSEC(50), MSEC(50), &toneGenerator, stopTone,
-       NULL); // Schedule stopTone
-  SEND(USEC(nextNote), USEC(50), self, playTone,
-       (melodyIndex + 1) % 32); // Schedule next note
-  return 0;
 }
 
 int toggleLight(MusicPlayer *self, int UNUSED) {
@@ -48,12 +61,23 @@ int toggleLight(MusicPlayer *self, int UNUSED) {
   return 0;
 }
 
-int togglePlay(MusicPlayer *self, int unused) {
+int togglePlay(MusicPlayer *self, int UNUSED) {
   if (self->stopped) {
     self->stopped = 0;
     ASYNC(self, playTone, 0);
   } else
     self->stopped = 1;
+  return 0;
+}
+
+int toggleLogTempo(MusicPlayer *self, int UNUSED) {
+  AFTER(SEC(10), self, logTempo, NULL);
+  return 0;
+}
+
+int logTempo(MusicPlayer *self, int UNUSED) {
+  print("Current tempo: %d BPM\n", self->tempo);
+  AFTER(SEC(10), self, logTempo, NULL);
   return 0;
 }
 
@@ -83,7 +107,8 @@ int durationToUsec(int tempo, int duration) {
   return 4 * 60 * 1000 * 1000 / tempo / duration;
 }
 
-int getPeriod(int semitone) {
+int getPeriod(int baseSemitone, int key) {
+  int semitone = baseSemitone + key;
   if (semitone < -10 || semitone > 14) {
     return 0;
   }

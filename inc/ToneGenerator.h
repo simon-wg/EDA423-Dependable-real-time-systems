@@ -7,7 +7,7 @@
 #define MAX_VOLUME 20
 #define MIN_VOLUME 0
 
-//START TONE GENERATOR CLASS
+// START TONE GENERATOR CLASS
 
 typedef struct {
   Object super;
@@ -24,8 +24,6 @@ int getVolume(ToneGenerator *, int);
 int setVolume(ToneGenerator *, int);
 int toggleMute(ToneGenerator *, int);
 
-//END TONE GENERATOR CLASS
-
-int getPeriod(int);
+// END TONE GENERATOR CLASS
 
 #endif

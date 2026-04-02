@@ -6,6 +6,7 @@
 #include "print.h"
 #include "sciTinyTimber.h"
 #include "sioTinyTimber.h"
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,13 +20,35 @@ extern SysIO sio0;
 int receiver(App *self, int unused) {
   CANMsg msg;
   CAN_RECEIVE(&can0, &msg);
-  print("Rcv(CAN): '%s'\n", msg.buff);
-  if (self->conductor) {
-    return 0;
+  switch (msg.msgId) {
+  case MSG_COMMAND:
+    print("Rcv(CAN): '%.*s'\n", msg.length, msg.buff);
+    if (self->conductor) {
+      return 0;
+    }
+    self->index = msg.length - 1;
+    memcpy(self->buf, msg.buff, self->index);
+    ASYNC(self, handleCan, msg.buff[msg.length - 1]);
+    break;
+  case MSG_HEARTBEAT:
+    ASYNC(self, canHeartbeatResponse, 0);
+    break;
+  case MSG_RESPONSE:
+    print("Heartbeat response received from node %d\n", msg.nodeId);
+    print("Known nodes: ");
+    addNode(self, msg.nodeId);
+    for (int i = 0; i < NODES_SIZE; i++) {
+      if (self->nodes[i] != 0) {
+        print("%d ", self->nodes[i]);
+      }
+    }
+    print("\n");
+    break;
+  default:
+    print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
+          msg.msgId, msg.nodeId, msg.length);
+    break;
   }
-  self->index = msg.length - 1;
-  memcpy(self->buf, msg.buff, self->index);
-  ASYNC(self, handleCan, msg.buff[msg.length - 1]);
   return 0;
 }
 
@@ -57,26 +80,32 @@ int handleCan(App *self, int c) {
   switch (c) {
   case 'm':
     ASYNC(&toneGenerator, toggleMute, NULL);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 'i':
     volume = SYNC(&toneGenerator, getVolume, NULL);
     ASYNC(&toneGenerator, setVolume, volume + 1);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 'u':
     volume = SYNC(&toneGenerator, getVolume, NULL);
     ASYNC(&toneGenerator, setVolume, volume - 1);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 't':
     n = getInt(self);
     ASYNC(&musicPlayer, setTempo, n);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 'k':
     n = getInt(self);
     ASYNC(&musicPlayer, setKey, n);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 'p':
     ASYNC(&musicPlayer, togglePlay, NULL);
-    return 0;
+    ASYNC(self, clearBuffer, 0);
+    break;
   }
   return 0;
 }
@@ -93,54 +122,100 @@ int handleSerial(App *self, int c) {
   switch (c) {
   case 'F':
     ASYNC(self, clearBuffer, 0);
-    return 0;
+    break;
+  case 'd':
+    canHeartbeat(self, 0);
+    ASYNC(self, clearBuffer, 0);
+    break;
   case 'm':
-    sendCan(self, c);
+    canCommand(self, c);
+    ASYNC(self, clearBuffer, 0);
     if (self->conductor)
       ASYNC(&toneGenerator, toggleMute, NULL);
-    return 0;
+    break;
   case 'i':
-    sendCan(self, c);
+    canCommand(self, c);
+    ASYNC(self, clearBuffer, 0);
     volume = SYNC(&toneGenerator, getVolume, NULL);
     if (self->conductor)
       ASYNC(&toneGenerator, setVolume, volume + 1);
-    return 0;
+    break;
   case 'u':
-    sendCan(self, c);
+    canCommand(self, c);
+    ASYNC(self, clearBuffer, 0);
     volume = SYNC(&toneGenerator, getVolume, NULL);
     if (self->conductor)
       ASYNC(&toneGenerator, setVolume, volume - 1);
-    return 0;
+    break;
   case 't':
-    sendCan(self, c);
+    canCommand(self, c);
     n = getInt(self);
+    ASYNC(self, clearBuffer, 0);
     if (self->conductor)
       ASYNC(&musicPlayer, setTempo, n);
-    return 0;
+    break;
   case 'k':
-    sendCan(self, c);
+    canCommand(self, c);
     n = getInt(self);
+    ASYNC(self, clearBuffer, 0);
     if (self->conductor)
       ASYNC(&musicPlayer, setKey, n);
-    return 0;
+    break;
   case 'p':
-    sendCan(self, c);
-    if (self->conductor)
+    canCommand(self, c);
+    ASYNC(self, clearBuffer, 0);
+    if (self->conductor) {
       ASYNC(&musicPlayer, togglePlay, NULL);
-    return 0;
+      ASYNC(&musicPlayer, toggleLogTempo, NULL);
+    }
+    break;
   default:
     ASYNC(self, appendBuffer, c);
-    return 0;
+    break;
   }
+  return 0;
 }
 
-int sendCan(App *self, int c) {
+int canCommand(App *self, int c) {
   CANMsg msg;
-  msg.msgId = 1;
-  msg.nodeId = 1;
+  msg.msgId = MSG_COMMAND;
+  msg.nodeId = NODE_ID; // Group id as node id for simplicity
   msg.length = self->index + 1;
   memcpy(msg.buff, self->buf, self->index);
   msg.buff[msg.length - 1] = c;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int canHeartbeat(App *self, int unused) {
+  for (int i = 0; i < NODES_SIZE; i++)
+    self->nodes[i] = 0;
+  self->nodes[0] = NODE_ID;
+  CANMsg msg;
+  msg.msgId = MSG_HEARTBEAT;
+  msg.nodeId = NODE_ID;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int addNode(App *self, int nodeId) {
+  // Check if nodeId already exists in the list
+  for (int i = 0; i < NODES_SIZE; i++) {
+    if (self->nodes[i] == nodeId) {
+      return 0;
+    }
+    if (self->nodes[i] == 0) { // Empty slot found, add nodeId here
+      self->nodes[i] = nodeId;
+      return 0;
+    }
+  }
+}
+
+int canHeartbeatResponse(App *self, int unused) {
+  CANMsg msg;
+  msg.msgId = MSG_RESPONSE;
+  msg.nodeId = 2;
+  // msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
   return 0;
 }
@@ -167,4 +242,34 @@ int getInt(App *self) {
   strBuf[self->index] = '\0';
   self->index = 0;
   return atoi(strBuf);
+}
+
+int compare(const void *a, const void *b) {
+  unsigned char *valA = a;
+  unsigned char *valB = b;
+  return *valA - *valB;
+}
+
+int getOrder(App *self, int nodeId) {
+  int size = sizeof(self->nodes) / sizeof(self->nodes[0]);
+  qsort(self->nodes, size, sizeof(self->nodes[0]), compare);
+  int leadingZeros = 0;
+  for (int i = 0; i < size; i++) {
+    if (self->nodes[i] == 0) {
+      leadingZeros++;
+    } else if (self->nodes[i] == nodeId) {
+      return i - leadingZeros;
+    }
+  }
+  return -1;
+}
+
+int getNodesCount(App *self, int unused) {
+  int count = 0;
+  for (int i = 0; i < NODES_SIZE; i++) {
+    if (self->nodes[i] != 0) {
+      count++;
+    }
+  }
+  return count;
 }

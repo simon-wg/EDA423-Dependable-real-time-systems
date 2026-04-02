@@ -10,7 +10,7 @@
 extern const int MELODY[32];
 extern const int PERIOD[];
 
-//START MUSIC PLAYER CLASS
+// START MUSIC PLAYER CLASS
 
 typedef struct {
   Object super;
@@ -21,16 +21,20 @@ typedef struct {
 
 #define initMusicPlayer() {initObject(), 120, 0, 1}
 
-int playTone(MusicPlayer *,int);
+int playTone(MusicPlayer *, int);
 int togglePlay(MusicPlayer *, int);
-int setTempo(MusicPlayer *,int);
+int toggleLogTempo(MusicPlayer *, int);
+int logTempo(MusicPlayer *, int);
+int setTempo(MusicPlayer *, int);
 int setKey(MusicPlayer *, int);
 int toggleLight(MusicPlayer *, int);
 int writeLight(MusicPlayer *, int);
 
-//END MUSIC PLAYER CLASS
+// END MUSIC PLAYER CLASS
 
+void scheduleToggleLed(MusicPlayer *, int, int);
 int durationToUsec(int, int);
-int getPeriod(int);
+int getPeriod(int, int);
+char checkTurn(int);
 
 #endif

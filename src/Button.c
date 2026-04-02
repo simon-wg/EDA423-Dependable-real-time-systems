@@ -49,8 +49,9 @@ int pressAndHold(Button *self, int UNUSED) {
 
 int resetTempo(Button *self, int UNUSED) {
   self->mode = 2;
-  print("Resetting tempo to default\n");
+  print("Resetting tempo and key to default\n");
   ASYNC(&musicPlayer, setTempo, 120);
+  ASYNC(&musicPlayer, setKey, 0);
   return 0;
 }
 
