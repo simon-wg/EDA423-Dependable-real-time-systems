@@ -4,6 +4,10 @@
 #include "TinyTimber.h"
 #include <stdint.h>
 
+/*
+ * Button Class Definition
+ */
+
 typedef struct {
   Object super;
   Timer trigTimer;
@@ -14,9 +18,13 @@ typedef struct {
 
 #define initButton() {initObject(), initTimer(), 0, NULL, NULL}
 
-int buttonPress(Button *, int);
-int buttonRelease(Button *, int);
-int claimConductor(Button *, int);
-int resetTempo(Button *, int);
+/*
+ * Button Class Methods
+ */
+
+int handleButtonPress(Button *, int);
+int handleButtonRelease(Button *, int);
+int enterConductorMode(Button *, int);
+int enterResetMode(Button *, int);
 
 #endif

@@ -1,21 +1,29 @@
 #include "ToneGenerator.h"
 #include "print.h"
 
-int generateTone(ToneGenerator *self, int period) {
+/* ==========================================================================
+ * Tone Generation
+ * ========================================================================== */
+
+int startTone(ToneGenerator *self, int period) {
   if (self->stopped) {
     self->stopped = 0;
     return 0;
   }
-  SEND(USEC(period), USEC(100), self, generateTone, period);
+
+  SEND(USEC(period), USEC(100), self, startTone, period);
+
   if (self->muted) {
     return 0;
   }
+
   int current = READ_REG(DAC->DHR8R2);
   if (current == 0) {
     WRITE_REG(DAC->DHR8R2, self->volume);
   } else {
     WRITE_REG(DAC->DHR8R2, 0);
   }
+
   return 0;
 }
 
@@ -24,9 +32,15 @@ int stopTone(ToneGenerator *self, int unused) {
   return 0;
 }
 
-int getVolume(ToneGenerator *self, int unused) { return self->volume; }
+/* ==========================================================================
+ * Volume Control
+ * ========================================================================== */
 
-int setVolume(ToneGenerator *self, int volume) {
+int getCurrentVolume(ToneGenerator *self, int unused) {
+  return self->volume;
+}
+
+int setOutputVolume(ToneGenerator *self, int volume) {
   if (volume < MIN_VOLUME) {
     self->volume = MIN_VOLUME;
   } else if (volume > MAX_VOLUME) {
@@ -38,7 +52,11 @@ int setVolume(ToneGenerator *self, int volume) {
   return 0;
 }
 
-int toggleMute(ToneGenerator *self, int unused) {
+/* ==========================================================================
+ * Mute State Management
+ * ========================================================================== */
+
+int toggleMuteState(ToneGenerator *self, int unused) {
   self->muted ^= 1;
   return self->muted;
 }

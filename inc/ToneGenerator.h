@@ -1,5 +1,5 @@
-#ifndef _MUSIC_H
-#define _MUSIC_H
+#ifndef _TONEGENERATOR_H
+#define _TONEGENERATOR_H
 
 #include "TinyTimber.h"
 #include <stdint.h>
@@ -7,7 +7,9 @@
 #define MAX_VOLUME 20
 #define MIN_VOLUME 0
 
-// START TONE GENERATOR CLASS
+/*
+ * ToneGenerator Class Definition
+ */
 
 typedef struct {
   Object super;
@@ -18,12 +20,14 @@ typedef struct {
 
 #define initToneGenerator(v) {initObject(), v, 0, 0};
 
-int generateTone(ToneGenerator *, int);
-int stopTone(ToneGenerator *, int);
-int getVolume(ToneGenerator *, int);
-int setVolume(ToneGenerator *, int);
-int toggleMute(ToneGenerator *, int);
+/*
+ * ToneGenerator Class Methods
+ */
 
-// END TONE GENERATOR CLASS
+int startTone(ToneGenerator *, int);
+int stopTone(ToneGenerator *, int);
+int getCurrentVolume(ToneGenerator *, int);
+int setOutputVolume(ToneGenerator *, int);
+int toggleMuteState(ToneGenerator *, int);
 
 #endif

@@ -15,6 +15,10 @@ typedef enum {
   MSG_CONDUCTOR = 4,
 } MessageType;
 
+/*
+ * App Class Definition
+ */
+
 typedef struct {
   Object super;
   Timer claimTimer;
@@ -28,26 +32,33 @@ typedef struct {
 
 #define initApp() {initObject(), initTimer(), {0}, 0, 0, 0, 0, {NODE_ID, 0, 0}}
 
-int reader(App *, int);
-int receiver(App *, int);
-int startApp(App *, int);
-int handleSerial(App *, int);
-int handleCan(App *, int);
-int canCommand(App *, int);
-int canHeartbeat(App *, int);
-int canReset(App *, int);
-int canClaimConductor(App *, int);
-int addNode(App *, int);
-int canHeartbeatResponse(App *, int);
-int clearBuffer(App *, int);
-int appendBuffer(App *, int);
+/*
+ * App Class Methods
+ */
 
-int getInt(App *);
+int handleSerialInput(App *, int);
+int handleCanMessage(App *, int);
+int initialize(App *, int);
+int processSerialCommand(App *, int);
+int processCanCommand(App *, int);
+int broadcastCanCommand(App *, int);
+int sendHeartbeat(App *, int);
+int sendResetCommand(App *, int);
+int sendConductorClaim(App *, int);
+int registerNode(App *, int);
+int sendHeartbeatReply(App *, int);
+int clearInputBuffer(App *, int);
+int appendToBuffer(App *, int);
 
-int getOrder(App *, int);
-int getNodesCount(App *, int);
-int isConductor(App *, int);
-int timeSinceLastClaimGt(App *, int);
-void toggleConductor(App *);
+/*
+ * Helper Functions
+ */
+
+int parseBufferAsInt(App *);
+int getNodeOrder(App *, int);
+int getRegisteredNodeCount(App *, int);
+int hasConductorRole(App *, int);
+int isClaimTimedOut(App *, int);
+void toggleConductorMode(App *);
 
 #endif
