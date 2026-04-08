@@ -34,6 +34,17 @@ int playTone(MusicPlayer *self, int melodyIndex) {
   return 0;
 }
 
+void scheduleToggleLed(MusicPlayer *self, int melodyIndex, int nextNote) {
+  if (!SYNC(&app, isConductor, 0)) {
+    return;
+  }
+  int numToggles = 8 / DURATIONS[melodyIndex];
+  int toggleInterval = nextNote / numToggles;
+  for (int i = 0; i < numToggles; i++) {
+    AFTER(USEC(toggleInterval * i), self, toggleLight, NULL);
+  }
+}
+
 char checkTurn(int melodyIndex) {
   int order = SYNC(&app, getOrder, NODE_ID);
   int nodes = SYNC(&app, getNodesCount, NODE_ID);
@@ -44,16 +55,13 @@ char checkTurn(int melodyIndex) {
   return 0;
 }
 
-void scheduleToggleLed(MusicPlayer *self, int melodyIndex, int nextNote) {
-  // WE ALSO SCHEDULE LIGHT TOGGLES HERE
-  // IF DURATION IS 2, WE SCHEDULE 4 TOGGLES
-  // IF DURATION IS 4, WE SCHEDULE 2 TOGGLES
-  // IF DURATION IS 8, WE SCHEDULE 1 TOGGLE
-  int numToggles = 8 / DURATIONS[melodyIndex];
-  int toggleInterval = nextNote / numToggles;
-  for (int i = 0; i < numToggles; i++) {
-    AFTER(USEC(toggleInterval * i), self, toggleLight, NULL);
+int toggleLightAndMuted(MusicPlayer *self, int UNUSED) {
+  if (SYNC(&app, isConductor, 0)) {
+    return 0;
   }
+  int muted = SYNC(&toneGenerator, toggleMute, NULL);
+  SIO_WRITE(&sio0, muted);
+  return 0;
 }
 
 int toggleLight(MusicPlayer *self, int UNUSED) {
@@ -67,17 +75,6 @@ int togglePlay(MusicPlayer *self, int UNUSED) {
     ASYNC(self, playTone, 0);
   } else
     self->stopped = 1;
-  return 0;
-}
-
-int toggleLogTempo(MusicPlayer *self, int UNUSED) {
-  AFTER(SEC(10), self, logTempo, NULL);
-  return 0;
-}
-
-int logTempo(MusicPlayer *self, int UNUSED) {
-  print("Current tempo: %d BPM\n", self->tempo);
-  AFTER(SEC(10), self, logTempo, NULL);
   return 0;
 }
 

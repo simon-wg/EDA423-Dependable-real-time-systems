@@ -1,4 +1,5 @@
 #include "Button.h"
+#include "App.h"
 #include "MusicPlayer.h"
 #include "print.h"
 #include "sioTinyTimber.h"
@@ -6,6 +7,7 @@
 
 extern SysIO sio0;
 extern MusicPlayer musicPlayer;
+extern App app;
 
 int buttonPress(Button *self, int UNUSED) {
   Time timeSinceLast = T_SAMPLE(&self->trigTimer); // Get time since last press
@@ -32,6 +34,8 @@ int buttonRelease(Button *self, int UNUSED) {
   }
   if (self->mode < 1) {
     ABORT(self->pahTask);
+    // Toggle mute
+    ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
   }
   print("Button released after %dms\n",
         timeSinceLast / 100); // 100 ticks per ms
@@ -50,8 +54,12 @@ int pressAndHold(Button *self, int UNUSED) {
 int resetTempo(Button *self, int UNUSED) {
   self->mode = 2;
   print("Resetting tempo and key to default\n");
+  if (!SYNC(&app, isConductor, NULL)) {
+    return 0;
+  }
   ASYNC(&musicPlayer, setTempo, 120);
   ASYNC(&musicPlayer, setKey, 0);
+  ASYNC(&app, canReset, 0);
   return 0;
 }
 

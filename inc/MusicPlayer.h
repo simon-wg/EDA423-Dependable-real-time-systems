@@ -23,11 +23,10 @@ typedef struct {
 
 int playTone(MusicPlayer *, int);
 int togglePlay(MusicPlayer *, int);
-int toggleLogTempo(MusicPlayer *, int);
-int logTempo(MusicPlayer *, int);
 int setTempo(MusicPlayer *, int);
 int setKey(MusicPlayer *, int);
 int toggleLight(MusicPlayer *, int);
+int toggleLightAndMuted(MusicPlayer *, int);
 int writeLight(MusicPlayer *, int);
 
 // END MUSIC PLAYER CLASS

@@ -79,7 +79,7 @@ int handleCan(App *self, int c) {
   uint8_t volume;
   switch (c) {
   case 'm':
-    ASYNC(&toneGenerator, toggleMute, NULL);
+    ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
     ASYNC(self, clearBuffer, 0);
     break;
   case 'i':
@@ -115,6 +115,14 @@ int handleSerial(App *self, int c) {
   if (c == 'c') {
     self->conductor = !self->conductor;
     print("Conductor mode: %s\n", self->conductor ? "ON" : "OFF");
+    if (!self->conductor) {
+      // Set light to the actual muted state when losing conductor status
+      ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
+      ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
+    } else {
+      // Turn off light when becoming conductor
+      SIO_WRITE(&sio0, 1);
+    }
     return 0;
   }
   int n;
@@ -131,7 +139,7 @@ int handleSerial(App *self, int c) {
     canCommand(self, c);
     ASYNC(self, clearBuffer, 0);
     if (self->conductor)
-      ASYNC(&toneGenerator, toggleMute, NULL);
+      ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
     break;
   case 'i':
     canCommand(self, c);
@@ -165,8 +173,7 @@ int handleSerial(App *self, int c) {
     canCommand(self, c);
     ASYNC(self, clearBuffer, 0);
     if (self->conductor) {
-      ASYNC(&musicPlayer, togglePlay, NULL);
-      ASYNC(&musicPlayer, toggleLogTempo, NULL);
+      SYNC(&musicPlayer, togglePlay, NULL);
     }
     break;
   default:
@@ -195,6 +202,22 @@ int canHeartbeat(App *self, int unused) {
   msg.msgId = MSG_HEARTBEAT;
   msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int canReset(App *self, int unused) {
+  CANMsg tempoMsg;
+  CANMsg keyMsg;
+  memcpy(tempoMsg.buff, "120t", 4);
+  memcpy(keyMsg.buff, "0k", 3);
+  tempoMsg.msgId = MSG_COMMAND;
+  keyMsg.msgId = MSG_COMMAND;
+  tempoMsg.nodeId = NODE_ID;
+  keyMsg.nodeId = NODE_ID;
+  tempoMsg.length = 4;
+  keyMsg.length = 3;
+  CAN_SEND(&can0, &tempoMsg);
+  CAN_SEND(&can0, &keyMsg);
   return 0;
 }
 
@@ -273,3 +296,5 @@ int getNodesCount(App *self, int unused) {
   }
   return count;
 }
+
+int isConductor(App *self, int unused) { return self->conductor; }

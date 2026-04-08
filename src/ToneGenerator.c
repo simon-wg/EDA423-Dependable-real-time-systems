@@ -1,7 +1,6 @@
 #include "ToneGenerator.h"
 #include "print.h"
 
-
 int generateTone(ToneGenerator *self, int period) {
   if (self->stopped) {
     self->stopped = 0;
@@ -25,9 +24,7 @@ int stopTone(ToneGenerator *self, int unused) {
   return 0;
 }
 
-int getVolume(ToneGenerator *self, int unused) {
-  return self->volume;
-}
+int getVolume(ToneGenerator *self, int unused) { return self->volume; }
 
 int setVolume(ToneGenerator *self, int volume) {
   if (volume < MIN_VOLUME) {
@@ -43,5 +40,5 @@ int setVolume(ToneGenerator *self, int volume) {
 
 int toggleMute(ToneGenerator *self, int unused) {
   self->muted ^= 1;
-  return 0;
+  return self->muted;
 }

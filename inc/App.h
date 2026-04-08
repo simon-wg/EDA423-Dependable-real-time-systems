@@ -31,6 +31,7 @@ int handleSerial(App *, int);
 int handleCan(App *, int);
 int canCommand(App *, int);
 int canHeartbeat(App *, int);
+int canReset(App *, int);
 int addNode(App *, int);
 int canHeartbeatResponse(App *, int);
 int clearBuffer(App *, int);
@@ -40,6 +41,6 @@ int getInt(App *);
 
 int getOrder(App *, int);
 int getNodesCount(App *, int);
-
+int isConductor(App *, int);
 
 #endif
