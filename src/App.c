@@ -44,6 +44,23 @@ int receiver(App *self, int unused) {
     }
     print("\n");
     break;
+  case MSG_CONDUCTOR:
+    if (timeSinceLastClaimGt(self, CLAIM_TIMEOUT_SEC)) {
+      T_RESET(&self->claimTimer);
+      self->currentConductor = msg.nodeId;
+      if (self->conductor) {
+        toggleConductor(self);
+      }
+      break;
+    }
+    if (msg.nodeId > self->currentConductor) {
+      self->currentConductor = msg.nodeId;
+      if (self->conductor) {
+        toggleConductor(self);
+      }
+      break;
+    }
+    break;
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
           msg.msgId, msg.nodeId, msg.length);
@@ -113,16 +130,7 @@ int handleCan(App *self, int c) {
 int handleSerial(App *self, int c) {
   print("Rcv(SCI): '%c'\n", c);
   if (c == 'c') {
-    self->conductor = !self->conductor;
-    print("Conductor mode: %s\n", self->conductor ? "ON" : "OFF");
-    if (!self->conductor) {
-      // Set light to the actual muted state when losing conductor status
-      ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
-      ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
-    } else {
-      // Turn off light when becoming conductor
-      SIO_WRITE(&sio0, 1);
-    }
+    toggleConductor(self);
     return 0;
   }
   int n;
@@ -221,6 +229,19 @@ int canReset(App *self, int unused) {
   return 0;
 }
 
+void toggleConductor(App *self) {
+  self->conductor = !self->conductor;
+  print("Conductor mode: %s\n", self->conductor ? "ON" : "OFF");
+  if (!self->conductor) {
+    // Set light to the actual muted state when losing conductor status
+    ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
+    ASYNC(&musicPlayer, toggleLightAndMuted, NULL);
+  } else {
+    // Turn off light when becoming conductor
+    SIO_WRITE(&sio0, 1);
+  }
+}
+
 int addNode(App *self, int nodeId) {
   // Check if nodeId already exists in the list
   for (int i = 0; i < NODES_SIZE; i++) {
@@ -240,6 +261,24 @@ int canHeartbeatResponse(App *self, int unused) {
   msg.nodeId = 2;
   // msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int canClaimConductor(App *self, int unused) {
+  CANMsg msg;
+  msg.msgId = MSG_CONDUCTOR;
+  msg.nodeId = NODE_ID;
+  CAN_SEND(&can0, &msg);
+  if (!timeSinceLastClaimGt(self, CLAIM_TIMEOUT_SEC)) {
+    if (NODE_ID > self->currentConductor) {
+      self->currentConductor = NODE_ID;
+      toggleConductor(self);
+    }
+    return 0;
+  }
+  T_RESET(&self->claimTimer);
+  self->currentConductor = NODE_ID;
+  toggleConductor(self);
   return 0;
 }
 
@@ -298,3 +337,8 @@ int getNodesCount(App *self, int unused) {
 }
 
 int isConductor(App *self, int unused) { return self->conductor; }
+
+int timeSinceLastClaimGt(App *self, int ms) {
+  Time timeSinceLast = T_SAMPLE(&self->claimTimer);
+  return timeSinceLast > 100 * SEC(ms);
+}
