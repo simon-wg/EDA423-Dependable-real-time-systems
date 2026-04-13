@@ -3,7 +3,6 @@
 #include "MusicPlayer.h"
 #include "print.h"
 #include "sioTinyTimber.h"
-#include <stdlib.h>
 
 /* External Objects */
 extern SysIO sio0;
@@ -29,7 +28,9 @@ int handleButtonPress(Button *self, int UNUSED) {
   sio0.meth = (Method)handleButtonRelease;
 
   // Schedule mode entry tasks
-  self->resetTask = AFTER(SEC(2), self, enterResetMode, NULL);
+  if (SYNC(&app, hasConductorRole, NULL)) {
+    self->resetTask = AFTER(SEC(2), self, enterResetMode, NULL);
+  }
   self->conductorTask = AFTER(SEC(5), self, enterConductorMode, NULL);
 
   return 0;
@@ -49,13 +50,16 @@ int handleButtonRelease(Button *self, int UNUSED) {
 
   case 1: // Hold 2-5 sec - reset tempo and key
     ABORT(self->conductorTask);
-    if (!SYNC(&app, hasConductorRole, NULL)) {
+    switch (SYNC(&app, hasConductorRole, NULL)) {
+    case 0: // Not conductor - Failure mode
+      // FAILURE MODE CODE LATER
+      break;
+    case 1: // Conductor - reset tempo and key
+      ASYNC(&musicPlayer, setTempoBpm, 120);
+      ASYNC(&musicPlayer, setKeyOffset, 0);
+      ASYNC(&app, sendResetCommand, 0);
       break;
     }
-    ASYNC(&musicPlayer, setTempoBpm, 120);
-    ASYNC(&musicPlayer, setKeyOffset, 0);
-    ASYNC(&app, sendResetCommand, 0);
-    break;
 
   case 2: // Hold >5 sec - claim conductor
     if (SYNC(&app, hasConductorRole, NULL)) {

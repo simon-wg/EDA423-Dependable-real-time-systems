@@ -27,8 +27,10 @@ typedef struct {
  * MusicPlayer Class Methods
  */
 
-int playNextNote(MusicPlayer *, int);
-int togglePlayback(MusicPlayer *, int);
+int playNote(MusicPlayer *, int);
+int startPlayback(MusicPlayer *, int);
+int stopPlayback(MusicPlayer *, int);
+int getPlayingState(MusicPlayer *, int);
 int setTempoBpm(MusicPlayer *, int);
 int setKeyOffset(MusicPlayer *, int);
 int toggleLed(MusicPlayer *, int);

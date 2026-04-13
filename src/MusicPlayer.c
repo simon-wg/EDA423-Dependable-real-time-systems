@@ -41,37 +41,41 @@ const char DURATIONS[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 2, 8, 8,
  * Playback Control
  * ========================================================================== */
 
-int playNextNote(MusicPlayer *self, int melodyIndex) {
-  if (self->stopped) {
+int startPlayback(MusicPlayer *self, int UNUSED) {
+  self->stopped = 0;
+  ASYNC(self, playNote, 0);
+  return 0;
+}
+
+int stopPlayback(MusicPlayer *self, int unused) {
+  self->stopped = 1;
+  return 0;
+}
+
+int playNote(MusicPlayer *self, int melodyIndex) {
+  if (self->stopped)
     return 0;
-  }
 
   int period = calculatePeriod(MELODY[melodyIndex], self->key);
   int noteDuration = calculateNoteDuration(self->tempo, DURATIONS[melodyIndex]);
+  scheduleLedToggle(self, melodyIndex,
+                    calculateNoteDuration(self->tempo, DURATIONS[melodyIndex]));
 
-  if (shouldPlayNote(melodyIndex)) {
-    BEFORE(USEC(100), &toneGenerator, startTone, period);
+  if (!shouldPlayNote(melodyIndex))
+    return 0;
+
+  BEFORE(USEC(100), &toneGenerator, startTone, period);
+  SEND(USEC(noteDuration) - MSEC(50), MSEC(50), &toneGenerator, stopTone, NULL);
+
+  if (shouldPlayNote((melodyIndex + 1) % 32)) {
+    SEND(USEC(noteDuration), USEC(50), self, playNote, (melodyIndex + 1) % 32);
+    return 0;
   }
-
-  scheduleLedToggle(self, melodyIndex, noteDuration);
-
-  if (shouldPlayNote(melodyIndex)) {
-    SEND(USEC(noteDuration) - MSEC(50), MSEC(50), &toneGenerator, stopTone, NULL);
-  }
-
-  SEND(USEC(noteDuration), USEC(50), self, playNextNote, (melodyIndex + 1) % 32);
+  AFTER(USEC(noteDuration), &app, sendNote, (melodyIndex + 1) % 32);
   return 0;
 }
 
-int togglePlayback(MusicPlayer *self, int UNUSED) {
-  if (self->stopped) {
-    self->stopped = 0;
-    ASYNC(self, playNextNote, 0);
-  } else {
-    self->stopped = 1;
-  }
-  return 0;
-}
+int getPlayingState(MusicPlayer *self, int unused) { return !self->stopped; }
 
 /* ==========================================================================
  * Music Configuration

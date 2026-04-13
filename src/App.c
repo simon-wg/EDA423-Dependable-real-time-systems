@@ -58,7 +58,6 @@ int initialize(App *self, int arg) {
   CAN_INIT(&can0);
   SCI_INIT(&sci0);
   SIO_INIT(&sio0);
-  ASYNC(&musicPlayer, toggleLed, NULL);
   print("Hello world!\n");
   return 0;
 }
@@ -73,13 +72,27 @@ int handleCanMessage(App *self, int unused) {
 
   switch (msg.msgId) {
   case MSG_COMMAND:
-    print("Rcv(CAN): '%.*s'\n", msg.length, msg.buff);
     if (self->conductor) {
       return 0;
     }
-    self->index = msg.length - 1;
-    memcpy(self->buf, msg.buff, self->index);
-    ASYNC(self, processCanCommand, msg.buff[msg.length - 1]);
+    switch (msg.buff[0]) {
+    case 1: // Start melody command
+      print("Starting playback\n");
+      ASYNC(&musicPlayer, startPlayback, 0);
+      break;
+    case 2: // Stop melody command
+      print("Stopping playback\n");
+      ASYNC(&musicPlayer, stopPlayback, 0);
+      break;
+    case 3: // Tempo command
+      print("Setting tempo to %d BPM\n", msg.buff[1]);
+      ASYNC(&musicPlayer, setTempoBpm, msg.buff[1]);
+      break;
+    case 4: // Key command
+      print("Setting key offset to %d\n", msg.buff[1]);
+      ASYNC(&musicPlayer, setKeyOffset, msg.buff[1]);
+      break;
+    }
     break;
 
   case MSG_HEARTBEAT:
@@ -99,49 +112,17 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_CONDUCTOR:
+    print("Conductor claim received from node %d\n", msg.nodeId);
     handleConductorMessage(self, msg.nodeId);
+    break;
+
+  case MSG_NOTE:
+    ASYNC(&musicPlayer, playNote, msg.buff[0]);
     break;
 
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
           msg.msgId, msg.nodeId, msg.length);
-    break;
-  }
-  return 0;
-}
-
-int processCanCommand(App *self, int c) {
-  int n;
-  uint8_t volume;
-
-  switch (c) {
-  case 'm':
-    ASYNC(&musicPlayer, toggleLedMute, NULL);
-    ASYNC(self, clearInputBuffer, 0);
-    break;
-  case 'i':
-    volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
-    ASYNC(&toneGenerator, setOutputVolume, volume + 1);
-    ASYNC(self, clearInputBuffer, 0);
-    break;
-  case 'u':
-    volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
-    ASYNC(&toneGenerator, setOutputVolume, volume - 1);
-    ASYNC(self, clearInputBuffer, 0);
-    break;
-  case 't':
-    n = parseBufferAsInt(self);
-    ASYNC(&musicPlayer, setTempoBpm, n);
-    ASYNC(self, clearInputBuffer, 0);
-    break;
-  case 'k':
-    n = parseBufferAsInt(self);
-    ASYNC(&musicPlayer, setKeyOffset, n);
-    ASYNC(self, clearInputBuffer, 0);
-    break;
-  case 'p':
-    ASYNC(&musicPlayer, togglePlayback, NULL);
-    ASYNC(self, clearInputBuffer, 0);
     break;
   }
   return 0;
@@ -164,7 +145,7 @@ int processSerialCommand(App *self, int c) {
     return 0;
   }
 
-  int n;
+  int tmp;
   uint8_t volume;
 
   switch (c) {
@@ -176,44 +157,49 @@ int processSerialCommand(App *self, int c) {
     ASYNC(self, clearInputBuffer, 0);
     break;
   case 'm':
-    broadcastCanCommand(self, c);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor)
       ASYNC(&musicPlayer, toggleLedMute, NULL);
     break;
   case 'i':
-    broadcastCanCommand(self, c);
     ASYNC(self, clearInputBuffer, 0);
     volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
-    if (self->conductor)
-      ASYNC(&toneGenerator, setOutputVolume, volume + 1);
+    ASYNC(&toneGenerator, setOutputVolume, volume + 1);
     break;
   case 'u':
-    broadcastCanCommand(self, c);
     ASYNC(self, clearInputBuffer, 0);
     volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
-    if (self->conductor)
-      ASYNC(&toneGenerator, setOutputVolume, volume - 1);
+    ASYNC(&toneGenerator, setOutputVolume, volume - 1);
     break;
   case 't':
-    broadcastCanCommand(self, c);
-    n = parseBufferAsInt(self);
+    tmp = parseBufferAsInt(self);
+    ASYNC(self, sendSetTempoCommand, tmp);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor)
-      ASYNC(&musicPlayer, setTempoBpm, n);
+      ASYNC(&musicPlayer, setTempoBpm, tmp);
     break;
   case 'k':
-    broadcastCanCommand(self, c);
-    n = parseBufferAsInt(self);
+    tmp = parseBufferAsInt(self);
+    ASYNC(self, sendSetKeyCommand, tmp);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor)
-      ASYNC(&musicPlayer, setKeyOffset, n);
+      ASYNC(&musicPlayer, setKeyOffset, tmp);
     break;
   case 'p':
-    broadcastCanCommand(self, c);
+    tmp = SYNC(&musicPlayer, getPlayingState, NULL);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor) {
-      SYNC(&musicPlayer, togglePlayback, NULL);
+      switch (tmp) {
+      case 0:
+        SYNC(&musicPlayer, startPlayback, 0);
+        ASYNC(self, sendStartCommand, 0);
+        ASYNC(self, sendNote, 0);
+        break;
+      case 1:
+        SYNC(&musicPlayer, stopPlayback, 0);
+        ASYNC(self, sendStopCommand, 0);
+        break;
+      }
     }
     break;
   default:
@@ -227,14 +213,65 @@ int processSerialCommand(App *self, int c) {
  * CAN Network Communication
  * ========================================================================== */
 
-int broadcastCanCommand(App *self, int c) {
+int sendStartCommand(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
   msg.nodeId = NODE_ID;
-  msg.length = self->index + 1;
-  memcpy(msg.buff, self->buf, self->index);
-  msg.buff[msg.length - 1] = c;
+  msg.length = 1;
+  msg.buff[0] = 1;
   CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int sendStopCommand(App *self, int unused) {
+  CANMsg msg;
+  msg.msgId = MSG_COMMAND;
+  msg.nodeId = NODE_ID;
+  msg.length = 1;
+  msg.buff[0] = 2;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int sendSetKeyCommand(App *self, int key) {
+  CANMsg msg;
+  msg.msgId = MSG_COMMAND;
+  msg.nodeId = NODE_ID;
+  msg.length = 2;
+  msg.buff[0] = 4;
+  msg.buff[1] = key;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int sendSetTempoCommand(App *self, int tempo) {
+  CANMsg msg;
+  msg.msgId = MSG_COMMAND;
+  msg.nodeId = NODE_ID;
+  msg.length = 2;
+  msg.buff[0] = 3;
+  msg.buff[1] = tempo;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int sendResetCommand(App *self, int unused) {
+  CANMsg tempoMsg;
+  CANMsg keyMsg;
+
+  tempoMsg.buff[0] = 4;
+  tempoMsg.buff[1] = 120;
+  keyMsg.buff[0] = 3;
+  keyMsg.buff[1] = 0;
+  tempoMsg.msgId = MSG_COMMAND;
+  keyMsg.msgId = MSG_COMMAND;
+  tempoMsg.nodeId = NODE_ID;
+  keyMsg.nodeId = NODE_ID;
+  tempoMsg.length = 2;
+  keyMsg.length = 2;
+
+  CAN_SEND(&can0, &tempoMsg);
+  CAN_SEND(&can0, &keyMsg);
   return 0;
 }
 
@@ -250,28 +287,10 @@ int sendHeartbeat(App *self, int unused) {
   return 0;
 }
 
-int sendResetCommand(App *self, int unused) {
-  CANMsg tempoMsg;
-  CANMsg keyMsg;
-
-  memcpy(tempoMsg.buff, "120t", 4);
-  memcpy(keyMsg.buff, "0k", 3);
-  tempoMsg.msgId = MSG_COMMAND;
-  keyMsg.msgId = MSG_COMMAND;
-  tempoMsg.nodeId = NODE_ID;
-  keyMsg.nodeId = NODE_ID;
-  tempoMsg.length = 4;
-  keyMsg.length = 3;
-
-  CAN_SEND(&can0, &tempoMsg);
-  CAN_SEND(&can0, &keyMsg);
-  return 0;
-}
-
 int sendHeartbeatReply(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_RESPONSE;
-  msg.nodeId = 2;
+  msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
   return 0;
 }
@@ -296,6 +315,16 @@ int sendConductorClaim(App *self, int unused) {
   return 0;
 }
 
+int sendNote(App *self, int note) {
+  CANMsg msg;
+  msg.buff[0] = note;
+  msg.length = 1;
+  msg.msgId = MSG_NOTE;
+  msg.nodeId = NODE_ID;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
 /* ==========================================================================
  * Conductor Mode Management
  * ========================================================================== */
@@ -314,13 +343,11 @@ void toggleConductorMode(App *self) {
   }
 }
 
-int hasConductorRole(App *self, int unused) {
-  return self->conductor;
-}
+int hasConductorRole(App *self, int unused) { return self->conductor; }
 
 int isClaimTimedOut(App *self, int ms) {
   Time timeSinceLast = T_SAMPLE(&self->claimTimer);
-  return timeSinceLast > 100 * SEC(ms);
+  return timeSinceLast > 2 * MSEC(ms);
 }
 
 /* ==========================================================================

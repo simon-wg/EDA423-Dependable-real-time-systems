@@ -13,6 +13,7 @@ typedef enum {
   MSG_HEARTBEAT = 2,
   MSG_RESPONSE = 3,
   MSG_CONDUCTOR = 4,
+  MSG_NOTE = 5,
 } MessageType;
 
 /*
@@ -41,12 +42,16 @@ int handleCanMessage(App *, int);
 int initialize(App *, int);
 int processSerialCommand(App *, int);
 int processCanCommand(App *, int);
-int broadcastCanCommand(App *, int);
-int sendHeartbeat(App *, int);
+int sendStartCommand(App *, int);
+int sendStopCommand(App *, int);
+int sendSetKeyCommand(App *, int);
+int sendSetTempoCommand(App *, int);
 int sendResetCommand(App *, int);
-int sendConductorClaim(App *, int);
-int registerNode(App *, int);
+int sendHeartbeat(App *, int);
 int sendHeartbeatReply(App *, int);
+int sendConductorClaim(App *, int);
+int sendNote(App *, int);
+int registerNode(App *, int);
 int clearInputBuffer(App *, int);
 int appendToBuffer(App *, int);
 
