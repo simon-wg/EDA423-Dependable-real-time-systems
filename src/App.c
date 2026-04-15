@@ -2,6 +2,7 @@
 #include "MusicPlayer.h"
 #include "TinyTimber.h"
 #include "ToneGenerator.h"
+#include "Watchdog.h"
 #include "canTinyTimber.h"
 #include "print.h"
 #include "sciTinyTimber.h"
@@ -17,6 +18,7 @@ extern MusicPlayer musicPlayer;
 extern Can can0;
 extern Serial sci0;
 extern SysIO sio0;
+extern Watchdog watchdog;
 
 /* Private Helper Functions */
 static int compare(const void *a, const void *b) {
@@ -83,6 +85,7 @@ int handleCanMessage(App *self, int unused) {
     case 2: // Stop melody command
       print("Stopping playback\n");
       ASYNC(&musicPlayer, stopPlayback, 0);
+      ASYNC(&watchdog, stopWatchdog, 0);
       break;
     case 3: // Tempo command
       print("Setting tempo to %d BPM\n", msg.buff[1]);
@@ -97,6 +100,7 @@ int handleCanMessage(App *self, int unused) {
 
   case MSG_HEARTBEAT:
     ASYNC(self, sendHeartbeatReply, 0);
+    ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
 
   case MSG_RESPONSE:
@@ -117,8 +121,15 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_NOTE:
-    ASYNC(&musicPlayer, playNote, msg.buff[0]);
-    break;
+    if (self->conductor)
+      ASYNC(self, scheduleLedToggle, msg.buff[0]);
+    if (shouldPlayNote(self, msg.buff[0])) {
+      ASYNC(self, scheduleHeartbeats, msg.buff[0]);
+      ASYNC(&musicPlayer, playNote, msg.buff[0]);
+      break;
+    } else {
+      ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
+    }
 
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
@@ -316,6 +327,10 @@ int sendConductorClaim(App *self, int unused) {
 }
 
 int sendNote(App *self, int note) {
+  if (shouldPlayNote(self, note)) {
+    BEFORE(USEC(50), self, playNote, note);
+    return 0;
+  }
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;
@@ -348,6 +363,10 @@ int hasConductorRole(App *self, int unused) { return self->conductor; }
 int isClaimTimedOut(App *self, int ms) {
   Time timeSinceLast = T_SAMPLE(&self->claimTimer);
   return timeSinceLast > 2 * MSEC(ms);
+}
+
+int getCurrentConductor(App *self, int unused) {
+  return self->currentConductor;
 }
 
 /* ==========================================================================
@@ -395,6 +414,14 @@ int registerNode(App *self, int nodeId) {
   return 0;
 }
 
+int deleteNode(App *self, int nodeId) {
+  for (int i = 0; i < NODES_SIZE; i++) {
+    if (self->nodes[i] == nodeId) {
+      self->nodes[i] = 0;
+    }
+  }
+}
+
 int getNodeOrder(App *self, int nodeId) {
   int size = sizeof(self->nodes) / sizeof(self->nodes[0]);
   qsort(self->nodes, size, sizeof(self->nodes[0]), compare);
@@ -418,4 +445,56 @@ int getRegisteredNodeCount(App *self, int unused) {
     }
   }
   return count;
+}
+
+int shouldPlayNote(App *self, int melodyIndex) {
+  int order = getNodeOrder(self, NODE_ID);
+  int nodes = getRegisteredNodeCount(self, NODE_ID);
+  return order == melodyIndex % nodes;
+}
+
+/* ==========================================================================
+ * LED Control
+ * ========================================================================== */
+
+int toggleLed(App *self, int UNUSED) {
+  SIO_TOGGLE(&sio0);
+  return 0;
+}
+
+int toggleLedMute(App *self, int UNUSED) {
+  if (hasConductorRole(self, NULL))
+    return 0;
+  int muted = SYNC(&toneGenerator, toggleMuteState, NULL);
+  SIO_WRITE(&sio0, muted);
+  return 0;
+}
+
+int scheduleLedToggle(App *self, int melodyIndex) {
+  int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
+  if (hasConductorRole(self, NULL))
+    return 0;
+
+  int numToggles = 8 / noteDuration;
+  int toggleInterval = noteDuration / numToggles;
+
+  for (int i = 0; i < numToggles; i++) {
+    AFTER(USEC(toggleInterval * i), self, toggleLed, NULL);
+  }
+  return 0;
+}
+
+/* ==========================================================================
+ * Heartbeat Scheduling
+ * ========================================================================== */
+
+int scheduleHeartbeats(App *self, int melodyIndex) {
+  int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
+  int numToggles = 8 / noteDuration;
+  int toggleInterval = noteDuration / numToggles;
+
+  for (int i = 0; i < numToggles; i++) {
+    AFTER(USEC(toggleInterval * i), self, toggleLed, NULL);
+  }
+  return 0;
 }

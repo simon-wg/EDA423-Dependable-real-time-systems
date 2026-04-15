@@ -23,6 +23,7 @@ typedef enum {
 typedef struct {
   Object super;
   Timer claimTimer;
+  Timer heartBeatTimer;
   char buf[INPUT_BUFFER_SIZE];
   unsigned char index;
   unsigned char conductor;
@@ -31,7 +32,7 @@ typedef struct {
   unsigned char nodes[NODES_SIZE];
 } App;
 
-#define initApp() {initObject(), initTimer(), {0}, 0, 0, 0, 0, {NODE_ID, 0, 0}}
+#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, {NODE_ID, 0, 0}}
 
 /*
  * App Class Methods
@@ -50,10 +51,16 @@ int sendResetCommand(App *, int);
 int sendHeartbeat(App *, int);
 int sendHeartbeatReply(App *, int);
 int sendConductorClaim(App *, int);
+int getCurrentConductor(App *, int);
 int sendNote(App *, int);
 int registerNode(App *, int);
+int deleteNode(App *, int);
 int clearInputBuffer(App *, int);
 int appendToBuffer(App *, int);
+int scheduleLedToggle(App *, int);
+int toggleLed(App *, int);
+int toggleLedMute(App *, int);
+int scheduleHeartbeats(App *, int);
 
 /*
  * Helper Functions
@@ -62,6 +69,7 @@ int appendToBuffer(App *, int);
 int parseBufferAsInt(App *);
 int getNodeOrder(App *, int);
 int getRegisteredNodeCount(App *, int);
+int shouldPlayNote(App *, int);
 int hasConductorRole(App *, int);
 int isClaimTimedOut(App *, int);
 void toggleConductorMode(App *);

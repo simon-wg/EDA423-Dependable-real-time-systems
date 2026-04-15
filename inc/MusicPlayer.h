@@ -31,16 +31,15 @@ int playNote(MusicPlayer *, int);
 int startPlayback(MusicPlayer *, int);
 int stopPlayback(MusicPlayer *, int);
 int getPlayingState(MusicPlayer *, int);
+int getTempo(MusicPlayer *, int);
+int getNoteDuration(MusicPlayer *, int);
 int setTempoBpm(MusicPlayer *, int);
 int setKeyOffset(MusicPlayer *, int);
-int toggleLed(MusicPlayer *, int);
-int toggleLedMute(MusicPlayer *, int);
 
 /*
  * Helper Functions
  */
 
-void scheduleLedToggle(MusicPlayer *, int, int);
 int calculateNoteDuration(int, int);
 int calculatePeriod(int, int);
 
