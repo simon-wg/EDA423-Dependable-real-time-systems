@@ -1,6 +1,7 @@
 #include "MusicPlayer.h"
 #include "App.h"
 #include "ToneGenerator.h"
+#include "print.h"
 #include "sioTinyTimber.h"
 
 /* External Objects */
@@ -29,7 +30,7 @@ const char DURATIONS[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 2, 8, 8,
 
 int startPlayback(MusicPlayer *self, int UNUSED) {
   self->stopped = 0;
-  ASYNC(self, playNote, 0);
+  ASYNC(&app, sendNote, 0);
   return 0;
 }
 
@@ -53,6 +54,7 @@ int playNote(MusicPlayer *self, int melodyIndex) {
 }
 
 int getPlayingState(MusicPlayer *self, int unused) { return !self->stopped; }
+int getRawDuration(MusicPlayer *self, int note) { return DURATIONS[note % 32]; }
 int getNoteDuration(MusicPlayer *self, int note) {
   return calculateNoteDuration(self->tempo, DURATIONS[note % 32]);
 }
@@ -69,6 +71,7 @@ int setTempoBpm(MusicPlayer *self, int tempo) {
     tempo = MAX_TEMPO;
   }
   self->tempo = tempo;
+  print("Tempo set to %d BPM\n", tempo);
   return 0;
 }
 
@@ -79,6 +82,7 @@ int setKeyOffset(MusicPlayer *self, int key) {
     key = 5;
   }
   self->key = key;
+  print("Key set to %d\n", key);
   return 0;
 }
 
@@ -89,6 +93,8 @@ int setKeyOffset(MusicPlayer *self, int key) {
 int calculateNoteDuration(int tempo, int duration) {
   // BPM is quarter notes per minute
   // We take 4 * 60 seconds (1 minute) and divide
+  // 4 * 60 / tempo gives duration of a quarter note in seconds.
+  // Multiply with 1000 * 1000 gives micros
   return 4 * 60 * 1000 * 1000 / tempo / duration;
 }
 

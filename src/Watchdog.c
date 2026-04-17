@@ -29,7 +29,7 @@ int notifyWatchdog(Watchdog *self, int nodeId) {
 }
 
 int checkTimeout(Watchdog *self, int unused) {
-  if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(20)) {
+  if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(100)) {
     print("Node %d failed to send heartbeat in time. Assuming failure.\n",
           self->currentNote);
     // TODO:

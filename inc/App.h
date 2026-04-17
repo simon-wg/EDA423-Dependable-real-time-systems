@@ -10,10 +10,11 @@
 
 typedef enum {
   MSG_COMMAND = 1,
-  MSG_HEARTBEAT = 2,
-  MSG_RESPONSE = 3,
+  MSG_PING = 2,
+  MSG_REPLY = 3,
   MSG_CONDUCTOR = 4,
   MSG_NOTE = 5,
+  MSG_HEARTBEAT = 6,
 } MessageType;
 
 /*
@@ -48,8 +49,9 @@ int sendStopCommand(App *, int);
 int sendSetKeyCommand(App *, int);
 int sendSetTempoCommand(App *, int);
 int sendResetCommand(App *, int);
+int sendPing(App *, int);
+int sendReply(App *, int);
 int sendHeartbeat(App *, int);
-int sendHeartbeatReply(App *, int);
 int sendConductorClaim(App *, int);
 int getCurrentConductor(App *, int);
 int sendNote(App *, int);

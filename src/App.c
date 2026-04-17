@@ -2,7 +2,6 @@
 #include "MusicPlayer.h"
 #include "TinyTimber.h"
 #include "ToneGenerator.h"
-#include "Watchdog.h"
 #include "canTinyTimber.h"
 #include "print.h"
 #include "sciTinyTimber.h"
@@ -18,7 +17,6 @@ extern MusicPlayer musicPlayer;
 extern Can can0;
 extern Serial sci0;
 extern SysIO sio0;
-extern Watchdog watchdog;
 
 /* Private Helper Functions */
 static int compare(const void *a, const void *b) {
@@ -60,6 +58,7 @@ int initialize(App *self, int arg) {
   CAN_INIT(&can0);
   SCI_INIT(&sci0);
   SIO_INIT(&sio0);
+  ASYNC(self, registerNode, NODE_ID);
   print("Hello world!\n");
   return 0;
 }
@@ -85,34 +84,31 @@ int handleCanMessage(App *self, int unused) {
     case 2: // Stop melody command
       print("Stopping playback\n");
       ASYNC(&musicPlayer, stopPlayback, 0);
-      ASYNC(&watchdog, stopWatchdog, 0);
       break;
-    case 3: // Tempo command
-      print("Setting tempo to %d BPM\n", msg.buff[1]);
-      ASYNC(&musicPlayer, setTempoBpm, msg.buff[1]);
-      break;
-    case 4: // Key command
-      print("Setting key offset to %d\n", msg.buff[1]);
+    case 3: // Key command
       ASYNC(&musicPlayer, setKeyOffset, msg.buff[1]);
       break;
+    case 4: // Tempo command
+      ASYNC(&musicPlayer, setTempoBpm, (msg.buff[1] << 8) | msg.buff[2]);
+      break;
     }
     break;
 
-  case MSG_HEARTBEAT:
-    ASYNC(self, sendHeartbeatReply, 0);
-    ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
-    break;
-
-  case MSG_RESPONSE:
-    print("Heartbeat response received from node %d\n", msg.nodeId);
-    print("Known nodes: ");
+  case MSG_PING:
+    if (msg.nodeId == NODE_ID) {
+      break;
+    }
+    print("Ping received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
-    for (int i = 0; i < NODES_SIZE; i++) {
-      if (self->nodes[i] != 0) {
-        print("%d ", self->nodes[i]);
-      }
+    ASYNC(self, sendReply, msg.nodeId);
+    break;
+
+  case MSG_REPLY:
+    if (msg.nodeId == NODE_ID) {
+      break;
     }
-    print("\n");
+    print("Reply received from node %d\n", msg.nodeId);
+    registerNode(self, msg.nodeId);
     break;
 
   case MSG_CONDUCTOR:
@@ -121,16 +117,18 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_NOTE:
-    if (self->conductor)
-      ASYNC(self, scheduleLedToggle, msg.buff[0]);
+    if (msg.nodeId == NODE_ID) {
+      break;
+    }
     if (shouldPlayNote(self, msg.buff[0])) {
       ASYNC(self, scheduleHeartbeats, msg.buff[0]);
       ASYNC(&musicPlayer, playNote, msg.buff[0]);
-      break;
-    } else {
-      ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
+    } else if (self->conductor) {
+      ASYNC(self, scheduleLedToggle, msg.buff[0]);
     }
-
+    break;
+  case MSG_HEARTBEAT:
+    // Watchdog
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
           msg.msgId, msg.nodeId, msg.length);
@@ -144,13 +142,12 @@ int handleCanMessage(App *self, int unused) {
  * ========================================================================== */
 
 int handleSerialInput(App *self, int c) {
+  print("Rcv(SCI): '%c'\n", c);
   ASYNC(self, processSerialCommand, c);
   return 0;
 }
 
 int processSerialCommand(App *self, int c) {
-  print("Rcv(SCI): '%c'\n", c);
-
   if (c == 'c') {
     toggleConductorMode(self);
     return 0;
@@ -164,7 +161,7 @@ int processSerialCommand(App *self, int c) {
     ASYNC(self, clearInputBuffer, 0);
     break;
   case 'd':
-    sendHeartbeat(self, 0);
+    sendPing(self, 0);
     ASYNC(self, clearInputBuffer, 0);
     break;
   case 'm':
@@ -182,13 +179,6 @@ int processSerialCommand(App *self, int c) {
     volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
     ASYNC(&toneGenerator, setOutputVolume, volume - 1);
     break;
-  case 't':
-    tmp = parseBufferAsInt(self);
-    ASYNC(self, sendSetTempoCommand, tmp);
-    ASYNC(self, clearInputBuffer, 0);
-    if (self->conductor)
-      ASYNC(&musicPlayer, setTempoBpm, tmp);
-    break;
   case 'k':
     tmp = parseBufferAsInt(self);
     ASYNC(self, sendSetKeyCommand, tmp);
@@ -196,15 +186,22 @@ int processSerialCommand(App *self, int c) {
     if (self->conductor)
       ASYNC(&musicPlayer, setKeyOffset, tmp);
     break;
+  case 't':
+    tmp = parseBufferAsInt(self);
+    ASYNC(self, sendSetTempoCommand, tmp);
+    ASYNC(self, clearInputBuffer, 0);
+    if (self->conductor)
+      ASYNC(&musicPlayer, setTempoBpm, tmp);
+    break;
   case 'p':
     tmp = SYNC(&musicPlayer, getPlayingState, NULL);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor) {
+      print("Tmp is %d\n", tmp);
       switch (tmp) {
       case 0:
         SYNC(&musicPlayer, startPlayback, 0);
         ASYNC(self, sendStartCommand, 0);
-        ASYNC(self, sendNote, 0);
         break;
       case 1:
         SYNC(&musicPlayer, stopPlayback, 0);
@@ -212,6 +209,15 @@ int processSerialCommand(App *self, int c) {
         break;
       }
     }
+    break;
+  case 'M':
+    print("Current conductor: %d\n", self->currentConductor);
+    for (int i = 0; i < NODES_SIZE; i++) {
+      if (self->nodes[i] != 0) {
+        print("Node %d: %d\n", i, self->nodes[i]);
+      }
+    }
+    ASYNC(self, clearInputBuffer, 0);
     break;
   default:
     ASYNC(self, appendToBuffer, c);
@@ -249,7 +255,7 @@ int sendSetKeyCommand(App *self, int key) {
   msg.msgId = MSG_COMMAND;
   msg.nodeId = NODE_ID;
   msg.length = 2;
-  msg.buff[0] = 4;
+  msg.buff[0] = 3;
   msg.buff[1] = key;
   CAN_SEND(&can0, &msg);
   return 0;
@@ -259,9 +265,10 @@ int sendSetTempoCommand(App *self, int tempo) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
   msg.nodeId = NODE_ID;
-  msg.length = 2;
-  msg.buff[0] = 3;
-  msg.buff[1] = tempo;
+  msg.length = 3;
+  msg.buff[0] = 4;
+  msg.buff[1] = tempo >> 8 & 0xFF;
+  msg.buff[2] = tempo & 0xFF;
   CAN_SEND(&can0, &msg);
   return 0;
 }
@@ -286,21 +293,27 @@ int sendResetCommand(App *self, int unused) {
   return 0;
 }
 
-int sendHeartbeat(App *self, int unused) {
-  for (int i = 0; i < NODES_SIZE; i++)
-    self->nodes[i] = 0;
-  self->nodes[0] = NODE_ID;
-
+int sendPing(App *self, int unused) {
   CANMsg msg;
-  msg.msgId = MSG_HEARTBEAT;
+  msg.msgId = MSG_PING;
   msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
   return 0;
 }
 
-int sendHeartbeatReply(App *self, int unused) {
+int sendReply(App *self, int senderId) {
   CANMsg msg;
-  msg.msgId = MSG_RESPONSE;
+  msg.msgId = MSG_REPLY;
+  msg.nodeId = NODE_ID;
+  msg.length = 1;
+  msg.buff[0] = 1;
+  CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int sendHeartbeat(App *self, int unused) {
+  CANMsg msg;
+  msg.msgId = MSG_HEARTBEAT;
   msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
   return 0;
@@ -310,6 +323,7 @@ int sendConductorClaim(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_CONDUCTOR;
   msg.nodeId = NODE_ID;
+  msg.length = 0;
   CAN_SEND(&can0, &msg);
 
   if (!isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
@@ -328,8 +342,10 @@ int sendConductorClaim(App *self, int unused) {
 
 int sendNote(App *self, int note) {
   if (shouldPlayNote(self, note)) {
-    BEFORE(USEC(50), self, playNote, note);
-    return 0;
+    print("Playing note %d\n", note);
+    BEFORE(USEC(50), &musicPlayer, playNote, note);
+    ASYNC(self, scheduleHeartbeats, note);
+    ASYNC(self, scheduleLedToggle, note);
   }
   CANMsg msg;
   msg.buff[0] = note;
@@ -406,6 +422,8 @@ int registerNode(App *self, int nodeId) {
     if (self->nodes[i] == nodeId) {
       return 0;
     }
+  }
+  for (int i = 0; i < NODES_SIZE; i++) {
     if (self->nodes[i] == 0) {
       self->nodes[i] = nodeId;
       return 0;
@@ -418,8 +436,10 @@ int deleteNode(App *self, int nodeId) {
   for (int i = 0; i < NODES_SIZE; i++) {
     if (self->nodes[i] == nodeId) {
       self->nodes[i] = 0;
+      return 0;
     }
   }
+  return 0;
 }
 
 int getNodeOrder(App *self, int nodeId) {
@@ -447,10 +467,10 @@ int getRegisteredNodeCount(App *self, int unused) {
   return count;
 }
 
-int shouldPlayNote(App *self, int melodyIndex) {
+int shouldPlayNote(App *self, int nodeNote) {
   int order = getNodeOrder(self, NODE_ID);
   int nodes = getRegisteredNodeCount(self, NODE_ID);
-  return order == melodyIndex % nodes;
+  return order == nodeNote % nodes;
 }
 
 /* ==========================================================================
@@ -463,7 +483,7 @@ int toggleLed(App *self, int UNUSED) {
 }
 
 int toggleLedMute(App *self, int UNUSED) {
-  if (hasConductorRole(self, NULL))
+  if (hasConductorRole(self, 0))
     return 0;
   int muted = SYNC(&toneGenerator, toggleMuteState, NULL);
   SIO_WRITE(&sio0, muted);
@@ -471,11 +491,13 @@ int toggleLedMute(App *self, int UNUSED) {
 }
 
 int scheduleLedToggle(App *self, int melodyIndex) {
+  // noteDuration is in microseconds
   int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
-  if (hasConductorRole(self, NULL))
+  int rawDuration = SYNC(&musicPlayer, getRawDuration, melodyIndex);
+  if (!hasConductorRole(self, 0))
     return 0;
 
-  int numToggles = 8 / noteDuration;
+  int numToggles = 8 / rawDuration;
   int toggleInterval = noteDuration / numToggles;
 
   for (int i = 0; i < numToggles; i++) {
@@ -489,12 +511,10 @@ int scheduleLedToggle(App *self, int melodyIndex) {
  * ========================================================================== */
 
 int scheduleHeartbeats(App *self, int melodyIndex) {
+  // noteDuration is in microseconds
   int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
-  int numToggles = 8 / noteDuration;
-  int toggleInterval = noteDuration / numToggles;
-
-  for (int i = 0; i < numToggles; i++) {
-    AFTER(USEC(toggleInterval * i), self, toggleLed, NULL);
+  for (int i = 0; i < noteDuration; i += 100000) {
+    AFTER(USEC(i), self, sendHeartbeat, NULL);
   }
   return 0;
 }

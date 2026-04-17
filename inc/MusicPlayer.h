@@ -33,6 +33,7 @@ int stopPlayback(MusicPlayer *, int);
 int getPlayingState(MusicPlayer *, int);
 int getTempo(MusicPlayer *, int);
 int getNoteDuration(MusicPlayer *, int);
+int getRawDuration(MusicPlayer *, int);
 int setTempoBpm(MusicPlayer *, int);
 int setKeyOffset(MusicPlayer *, int);
 
