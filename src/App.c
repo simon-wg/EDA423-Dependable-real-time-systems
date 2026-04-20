@@ -120,9 +120,8 @@ int handleCanMessage(App *self, int unused) {
       print("Playing note %d\n", msg.buff[0]);
       ASYNC(self, scheduleHeartbeats, msg.buff[0]);
       ASYNC(&musicPlayer, playNote, msg.buff[0]);
-    } else {
-      ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
     }
+    ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
     break;
   case MSG_HEARTBEAT:
     print("Heartbeat received from node %d\n", msg.nodeId);
@@ -347,9 +346,8 @@ int sendNote(App *self, int note) {
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     ASYNC(self, scheduleHeartbeats, note);
-  } else {
-    ASYNC(&watchdog, resetWatchdog, note);
   }
+  ASYNC(&watchdog, resetWatchdog, note);
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;
@@ -532,6 +530,7 @@ int scheduleHeartbeats(App *self, int melodyIndex) {
   int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
   for (int i = 0; i < noteDuration; i += 100000) {
     AFTER(USEC(i), self, sendHeartbeat, NULL);
+    AFTER(USEC(i), &watchdog, notifyWatchdog, NODE_ID);
   }
   return 0;
 }
