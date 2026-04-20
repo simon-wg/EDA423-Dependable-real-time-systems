@@ -129,6 +129,8 @@ int handleCanMessage(App *self, int unused) {
     break;
   case MSG_HEARTBEAT:
     // Watchdog
+    print("Heartbeat received from node %d\n", msg.nodeId);
+    break;
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
           msg.msgId, msg.nodeId, msg.length);
