@@ -207,7 +207,7 @@ int processSerialCommand(App *self, int c) {
       switch (tmp) {
       case 0:
         SYNC(&musicPlayer, startPlayback, 0);
-        SYNC(self, sendStartCommand, 0);
+        sendStartCommand(self, 0);
         AFTER(MSEC(1), &app, sendNote, 0);
         break;
       case 1:
