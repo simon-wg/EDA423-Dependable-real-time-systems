@@ -120,12 +120,13 @@ int handleCanMessage(App *self, int unused) {
     if (msg.nodeId == NODE_ID) {
       break;
     }
+    if (self->conductor) {
+      ASYNC(self, scheduleLedToggle, msg.buff[0]);
+    }
     if (shouldPlayNote(self, msg.buff[0])) {
       print("Playing note %d\n", msg.buff[0]);
       ASYNC(self, scheduleHeartbeats, msg.buff[0]);
       ASYNC(&musicPlayer, playNote, msg.buff[0]);
-    } else if (self->conductor) {
-      ASYNC(self, scheduleLedToggle, msg.buff[0]);
     }
     break;
   case MSG_HEARTBEAT:
@@ -204,7 +205,7 @@ int processSerialCommand(App *self, int c) {
       case 0:
         SYNC(&musicPlayer, startPlayback, 0);
         SYNC(self, sendStartCommand, 0);
-        AFTER(MSEC(1), &app, sendNote, 0);
+        AFTER(MSEC(10), &app, sendNote, 0);
         break;
       case 1:
         SYNC(&musicPlayer, stopPlayback, 0);
