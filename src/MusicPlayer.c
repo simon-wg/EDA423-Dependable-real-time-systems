@@ -30,7 +30,6 @@ const char DURATIONS[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 2, 8, 8,
 
 int startPlayback(MusicPlayer *self, int UNUSED) {
   self->stopped = 0;
-  ASYNC(&app, sendNote, 0);
   return 0;
 }
 
