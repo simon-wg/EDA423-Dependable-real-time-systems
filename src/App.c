@@ -347,8 +347,9 @@ int sendNote(App *self, int note) {
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     ASYNC(self, scheduleHeartbeats, note);
+  } else {
+    ASYNC(&watchdog, resetWatchdog, note);
   }
-  ASYNC(&watchdog, resetWatchdog, note);
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;

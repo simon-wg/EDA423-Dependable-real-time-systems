@@ -29,10 +29,8 @@ int notifyWatchdog(Watchdog *self, int nodeId) {
 int checkTimeout(Watchdog *self, int unused) {
   if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(200)) {
     int failedNode = SYNC(&app, getExpectedNodeForNote, self->currentNote);
-    print("Node %d failed to send heartbeat in time. Assuming failure of node "
-          "%d.\n",
-          self->currentNote, failedNode);
-    // TODO:
+    print("Node %d failed to send heartbeat in time. Assuming failure.\n",
+          failedNode, failedNode);
     SYNC(&app, deleteNode, failedNode);
     ASYNC(&app, sendNote, self->currentNote);
   }
