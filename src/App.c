@@ -121,6 +121,7 @@ int handleCanMessage(App *self, int unused) {
       break;
     }
     if (shouldPlayNote(self, msg.buff[0])) {
+      print("Playing note %d\n", msg.buff[0]);
       ASYNC(self, scheduleHeartbeats, msg.buff[0]);
       ASYNC(&musicPlayer, playNote, msg.buff[0]);
     } else if (self->conductor) {
@@ -199,7 +200,6 @@ int processSerialCommand(App *self, int c) {
     tmp = SYNC(&musicPlayer, getPlayingState, NULL);
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor) {
-      print("Tmp is %d\n", tmp);
       switch (tmp) {
       case 0:
         SYNC(&musicPlayer, startPlayback, 0);
