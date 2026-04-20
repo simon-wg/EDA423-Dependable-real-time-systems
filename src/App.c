@@ -71,6 +71,9 @@ int handleCanMessage(App *self, int unused) {
   CANMsg msg;
   CAN_RECEIVE(&can0, &msg);
 
+  print("Rcv(CAN): id=%d, node=%d, length=%d, buff[0]=%d\n", msg.msgId,
+        msg.nodeId, msg.length, msg.buff[0]);
+
   switch (msg.msgId) {
   case MSG_COMMAND:
     if (self->conductor) {
@@ -205,7 +208,7 @@ int processSerialCommand(App *self, int c) {
       case 0:
         SYNC(&musicPlayer, startPlayback, 0);
         SYNC(self, sendStartCommand, 0);
-        AFTER(MSEC(10), &app, sendNote, 0);
+        AFTER(MSEC(1), &app, sendNote, 0);
         break;
       case 1:
         SYNC(&musicPlayer, stopPlayback, 0);
