@@ -20,7 +20,6 @@ int resetWatchdog(Watchdog *self, int noteIndex) {
 }
 
 int notifyWatchdog(Watchdog *self, int nodeId) {
-
   if (SYNC(&app, getExpectedNodeForNote, self->currentNote) == nodeId)
     T_RESET(&self->heartBeatTimer);
   return 0;
@@ -32,7 +31,7 @@ int checkTimeout(Watchdog *self, int unused) {
     print("Node %d failed to send heartbeat in time. Assuming failure.\n",
           failedNode, failedNode);
     SYNC(&app, deleteNode, failedNode);
-    ASYNC(&app, sendNote, self->currentNote);
+    T_RESET(&self->heartBeatTimer);
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);
   return 0;
