@@ -1,10 +1,12 @@
 #include "Watchdog.h"
 #include "App.h"
+#include "MusicPlayer.h"
 #include "TinyTimber.h"
 #include "print.h"
 
 /* External Objects */
 extern App app;
+extern MusicPlayer musicPlayer;
 
 /* ==========================================================================
  * Watchdog Control
@@ -29,9 +31,14 @@ int checkTimeout(Watchdog *self, int unused) {
   if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(200)) {
     int failedNode = SYNC(&app, getExpectedNodeForNote, self->currentNote);
     print("Node %d failed to send heartbeat in time. Assuming failure.\n",
-          failedNode, failedNode);
+          failedNode);
     SYNC(&app, deleteNode, failedNode);
     T_RESET(&self->heartBeatTimer);
+    if (SYNC(&app, shouldPlayNote, self->currentNote)) {
+      print("Playing note %d\n", self->currentNote);
+      BEFORE(USEC(50), &musicPlayer, playNote, self->currentNote);
+      ASYNC(&app, scheduleHeartbeats, self->currentNote);
+    }
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);
   return 0;
