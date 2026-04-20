@@ -2,6 +2,7 @@
 #include "MusicPlayer.h"
 #include "TinyTimber.h"
 #include "ToneGenerator.h"
+#include "Watchdog.h"
 #include "canTinyTimber.h"
 #include "print.h"
 #include "sciTinyTimber.h"
@@ -12,6 +13,7 @@
 
 /* External Objects */
 extern App app;
+extern Watchdog watchdog;
 extern ToneGenerator toneGenerator;
 extern MusicPlayer musicPlayer;
 extern Can can0;
@@ -71,9 +73,6 @@ int handleCanMessage(App *self, int unused) {
   CANMsg msg;
   CAN_RECEIVE(&can0, &msg);
 
-  print("Rcv(CAN): id=%d, node=%d, length=%d, buff[0]=%d\n", msg.msgId,
-        msg.nodeId, msg.length, msg.buff[0]);
-
   switch (msg.msgId) {
   case MSG_COMMAND:
     if (self->conductor) {
@@ -98,18 +97,12 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_PING:
-    if (msg.nodeId == NODE_ID) {
-      break;
-    }
     print("Ping received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     ASYNC(self, sendReply, msg.nodeId);
     break;
 
   case MSG_REPLY:
-    if (msg.nodeId == NODE_ID) {
-      break;
-    }
     print("Reply received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     break;
@@ -120,9 +113,6 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_NOTE:
-    if (msg.nodeId == NODE_ID) {
-      break;
-    }
     if (self->conductor) {
       ASYNC(self, scheduleLedToggle, msg.buff[0]);
     }
@@ -130,11 +120,13 @@ int handleCanMessage(App *self, int unused) {
       print("Playing note %d\n", msg.buff[0]);
       ASYNC(self, scheduleHeartbeats, msg.buff[0]);
       ASYNC(&musicPlayer, playNote, msg.buff[0]);
+    } else {
+      ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
     }
     break;
   case MSG_HEARTBEAT:
-    // Watchdog
     print("Heartbeat received from node %d\n", msg.nodeId);
+    ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
@@ -348,12 +340,15 @@ int sendConductorClaim(App *self, int unused) {
 }
 
 int sendNote(App *self, int note) {
+  if (self->conductor) {
+    ASYNC(self, scheduleLedToggle, note);
+  }
   if (shouldPlayNote(self, note)) {
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     ASYNC(self, scheduleHeartbeats, note);
-    ASYNC(self, scheduleLedToggle, note);
   }
+  ASYNC(&watchdog, resetWatchdog, note);
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;
@@ -478,6 +473,20 @@ int shouldPlayNote(App *self, int nodeNote) {
   int order = getNodeOrder(self, NODE_ID);
   int nodes = getRegisteredNodeCount(self, NODE_ID);
   return order == nodeNote % nodes;
+}
+
+int getExpectedNodeForNote(App *self, int note) {
+  int nodeCount = getRegisteredNodeCount(self, NODE_ID);
+  if (nodeCount == 0) {
+    return -1;
+  }
+  int expectedOrder = note % nodeCount;
+  for (int i = 0; i < NODES_SIZE; i++) {
+    if (getNodeOrder(self, self->nodes[i]) == expectedOrder) {
+      return self->nodes[i];
+    }
+  }
+  return -1;
 }
 
 /* ==========================================================================

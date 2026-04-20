@@ -20,22 +20,20 @@ int resetWatchdog(Watchdog *self, int noteIndex) {
 }
 
 int notifyWatchdog(Watchdog *self, int nodeId) {
-  int currentNodeCount = SYNC(&app, getRegisteredNodeCount, NULL);
-  if (SYNC(&app, getNodeOrder, nodeId) ==
-      self->currentNote % currentNodeCount) {
+
+  if (SYNC(&app, getExpectedNodeForNote, self->currentNote) == nodeId)
     T_RESET(&self->heartBeatTimer);
-  }
   return 0;
 }
 
 int checkTimeout(Watchdog *self, int unused) {
-  if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(100)) {
-    print("Node %d failed to send heartbeat in time. Assuming failure.\n",
-          self->currentNote);
+  if (T_SAMPLE(&self->heartBeatTimer) >= MSEC(200)) {
+    int failedNode = SYNC(&app, getExpectedNodeForNote, self->currentNote);
+    print("Node %d failed to send heartbeat in time. Assuming failure of node "
+          "%d.\n",
+          self->currentNote, failedNode);
     // TODO:
-    /* Handle node failure (e.g., remove from node list, reassign conductor,
-       etc.) FAILURE HANDLING CODE LATER */
-    ASYNC(&app, deleteNode, self->currentNote);
+    SYNC(&app, deleteNode, failedNode);
     ASYNC(&app, sendNote, self->currentNote);
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);

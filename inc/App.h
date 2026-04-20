@@ -57,6 +57,7 @@ int getCurrentConductor(App *, int);
 int sendNote(App *, int);
 int registerNode(App *, int);
 int deleteNode(App *, int);
+int getExpectedNodeForNote(App *, int);
 int clearInputBuffer(App *, int);
 int appendToBuffer(App *, int);
 int scheduleLedToggle(App *, int);
