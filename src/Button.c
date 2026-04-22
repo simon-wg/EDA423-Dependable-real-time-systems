@@ -53,6 +53,7 @@ int handleButtonRelease(Button *self, int UNUSED) {
     switch (SYNC(&app, hasConductorRole, NULL)) {
     case 0: // Not conductor - Failure mode
       // FAILURE MODE CODE LATER
+      ASYNC(&app, failureMode, 1);
       break;
     case 1: // Conductor - reset tempo and key
       ASYNC(&musicPlayer, setTempoBpm, 120);

@@ -29,7 +29,7 @@ typedef struct {
   unsigned char index;
   unsigned char conductor;
   unsigned char currentConductor;
-  unsigned char playing;
+  unsigned char failed;
   unsigned char nodes[NODES_SIZE];
 } App;
 
@@ -64,6 +64,7 @@ int scheduleLedToggle(App *, int);
 int toggleLed(App *, int);
 int toggleLedMute(App *, int);
 int scheduleHeartbeats(App *, int);
+int failureMode(App *, int);
 
 /*
  * Helper Functions

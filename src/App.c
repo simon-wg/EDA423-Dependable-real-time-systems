@@ -75,7 +75,7 @@ int handleCanMessage(App *self, int unused) {
 
   switch (msg.msgId) {
   case MSG_COMMAND:
-    if (self->conductor) {
+    if (self->conductor || self->failed) {
       return 0;
     }
     switch (msg.buff[0]) {
@@ -97,22 +97,34 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_PING:
+    if (self->failed) {
+      return 0;
+    }
     print("Ping received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     ASYNC(self, sendReply, msg.nodeId);
     break;
 
   case MSG_REPLY:
+    if (self->failed) {
+      return 0;
+    }
     print("Reply received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     break;
 
   case MSG_CONDUCTOR:
+    if (self->failed) {
+      return 0;
+    }
     print("Conductor claim received from node %d\n", msg.nodeId);
     handleConductorMessage(self, msg.nodeId);
     break;
 
   case MSG_NOTE:
+    if (self->failed) {
+      return 0;
+    }
     if (self->conductor) {
       ASYNC(self, scheduleLedToggle, msg.buff[0]);
     }
@@ -124,6 +136,9 @@ int handleCanMessage(App *self, int unused) {
     ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
     break;
   case MSG_HEARTBEAT:
+    if (self->failed) {
+      return 0;
+    }
     print("Heartbeat received from node %d\n", msg.nodeId);
     ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
@@ -137,7 +152,8 @@ int handleCanMessage(App *self, int unused) {
 
 /* ==========================================================================
  * Serial Input Handling
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int handleSerialInput(App *self, int c) {
   print("Rcv(SCI): '%c'\n", c);
@@ -147,7 +163,7 @@ int handleSerialInput(App *self, int c) {
 
 int processSerialCommand(App *self, int c) {
   if (c == 'c') {
-    toggleConductorMode(self);
+    ASYNC(self, toggleConductorMode, 0);
     return 0;
   }
 
@@ -226,7 +242,8 @@ int processSerialCommand(App *self, int c) {
 
 /* ==========================================================================
  * CAN Network Communication
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int sendStartCommand(App *self, int unused) {
   CANMsg msg;
@@ -359,7 +376,8 @@ int sendNote(App *self, int note) {
 
 /* ==========================================================================
  * Conductor Mode Management
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 void toggleConductorMode(App *self) {
   self->conductor = !self->conductor;
@@ -388,7 +406,8 @@ int getCurrentConductor(App *self, int unused) {
 
 /* ==========================================================================
  * Input Buffer Management
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int clearInputBuffer(App *self, int unused) {
   self->index = 0;
@@ -416,7 +435,8 @@ int parseBufferAsInt(App *self) {
 
 /* ==========================================================================
  * Node Discovery and Management
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int registerNode(App *self, int nodeId) {
   for (int i = 0; i < NODES_SIZE; i++) {
@@ -490,7 +510,8 @@ int getExpectedNodeForNote(App *self, int note) {
 
 /* ==========================================================================
  * LED Control
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int toggleLed(App *self, int UNUSED) {
   SIO_TOGGLE(&sio0);
@@ -523,7 +544,8 @@ int scheduleLedToggle(App *self, int melodyIndex) {
 
 /* ==========================================================================
  * Heartbeat Scheduling
- * ========================================================================== */
+ * ==========================================================================
+ */
 
 int scheduleHeartbeats(App *self, int melodyIndex) {
   // noteDuration is in microseconds
@@ -531,6 +553,19 @@ int scheduleHeartbeats(App *self, int melodyIndex) {
   for (int i = 0; i < noteDuration; i += 100000) {
     AFTER(USEC(i), self, sendHeartbeat, NULL);
     AFTER(USEC(i), &watchdog, notifyWatchdog, NODE_ID);
+  }
+  return 0;
+}
+
+/* ==========================================================================
+ * Failure Handling
+ * ==========================================================================
+ */
+
+int failureMode(App *self, int mode) {
+  self->failed ^= 1;
+  if (mode == 2) {
+    AFTER(SEC(7), self, failureMode, 0);
   }
   return 0;
 }
