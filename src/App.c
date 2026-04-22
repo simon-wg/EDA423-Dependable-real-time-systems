@@ -291,6 +291,8 @@ int sendReply(App *self, int senderId) {
   msg.length = 1;
   msg.buff[0] = 1;
   safeCanSend(self, &msg);
+  if (self->conductor)
+    ASYNC(self, sendConductorClaim, NULL);
   return 0;
 }
 
