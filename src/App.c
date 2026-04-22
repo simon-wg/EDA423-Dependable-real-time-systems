@@ -351,8 +351,6 @@ int sendConductorClaim(App *self, int unused) {
 int sendNote(App *self, int note) {
   if (handleNote(self, note))
     return 0;
-
-  ASYNC(self, stopPulse, NULL);
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;
@@ -363,6 +361,7 @@ int sendNote(App *self, int note) {
 }
 
 int handleNote(App *self, int note) {
+  stopPulse(self, 0);
   ASYNC(&watchdog, resetWatchdog, note);
   if (self->conductor) {
     ASYNC(self, scheduleLedToggle, note);
@@ -371,7 +370,8 @@ int handleNote(App *self, int note) {
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     self->sendingHeartbeats = 1;
-    ASYNC(self, pulse, NULL);
+    // Use 11 to guarantee bla bla pidgeonhole principle
+    AFTER(MSEC(11), self, pulse, NULL);
     return 1;
   }
   return 0;
