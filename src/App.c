@@ -3,7 +3,6 @@
 #include "TinyTimber.h"
 #include "ToneGenerator.h"
 #include "Watchdog.h"
-#include "canTinyTimber.h"
 #include "print.h"
 #include "sciTinyTimber.h"
 #include "sioTinyTimber.h"
@@ -72,10 +71,12 @@ int initialize(App *self, int arg) {
 int handleCanMessage(App *self, int unused) {
   CANMsg msg;
   CAN_RECEIVE(&can0, &msg);
+  if (self->failed)
+    return 0;
 
   switch (msg.msgId) {
   case MSG_COMMAND:
-    if (self->conductor || self->failed) {
+    if (self->conductor) {
       return 0;
     }
     switch (msg.buff[0]) {
@@ -97,43 +98,30 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_PING:
-    if (self->failed) {
-      return 0;
-    }
     print("Ping received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     ASYNC(self, sendReply, msg.nodeId);
     break;
 
   case MSG_REPLY:
-    if (self->failed) {
-      return 0;
-    }
     print("Reply received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
     break;
 
   case MSG_CONDUCTOR:
-    if (self->failed) {
-      return 0;
-    }
     print("Conductor claim received from node %d\n", msg.nodeId);
     handleConductorMessage(self, msg.nodeId);
     break;
 
   case MSG_NOTE:
-    if (self->failed) {
-      return 0;
-    }
     ASYNC(self, handleNote, msg.buff[0]);
     break;
+
   case MSG_HEARTBEAT:
-    if (self->failed) {
-      return 0;
-    }
     print("Heartbeat received from node %d\n", msg.nodeId);
     ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
+
   default:
     print("Unknown CAN message received: id=%d, node=%d, length=%d\n",
           msg.msgId, msg.nodeId, msg.length);
@@ -165,6 +153,7 @@ int processSerialCommand(App *self, int c) {
   switch (c) {
   case 'f':
     self->failureMode ^= 1;
+    print("Failure mode type: %s\n", self->failureMode ? "F2" : "F1");
     break;
   case 'd':
     sendPing(self, 0);
@@ -244,7 +233,7 @@ int sendStartCommand(App *self, int unused) {
   msg.nodeId = NODE_ID;
   msg.length = 1;
   msg.buff[0] = 1;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -254,7 +243,7 @@ int sendStopCommand(App *self, int unused) {
   msg.nodeId = NODE_ID;
   msg.length = 1;
   msg.buff[0] = 2;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -265,7 +254,7 @@ int sendSetKeyCommand(App *self, int key) {
   msg.length = 2;
   msg.buff[0] = 3;
   msg.buff[1] = key;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -277,7 +266,7 @@ int sendSetTempoCommand(App *self, int tempo) {
   msg.buff[0] = 4;
   msg.buff[1] = tempo >> 8 & 0xFF;
   msg.buff[2] = tempo & 0xFF;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -291,7 +280,7 @@ int sendPing(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_PING;
   msg.nodeId = NODE_ID;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -301,7 +290,7 @@ int sendReply(App *self, int senderId) {
   msg.nodeId = NODE_ID;
   msg.length = 1;
   msg.buff[0] = 1;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -309,7 +298,7 @@ int sendHeartbeat(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_HEARTBEAT;
   msg.nodeId = NODE_ID;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
@@ -317,8 +306,7 @@ int sendConductorClaim(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_CONDUCTOR;
   msg.nodeId = NODE_ID;
-  msg.length = 0;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
 
   if (!isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
     if (NODE_ID > self->currentConductor) {
@@ -342,11 +330,16 @@ int sendNote(App *self, int note) {
   msg.length = 1;
   msg.msgId = MSG_NOTE;
   msg.nodeId = NODE_ID;
-  CAN_SEND(&can0, &msg);
+  safeCanSend(self, &msg);
   return 0;
 }
 
 int handleNote(App *self, int note) {
+  /* This makes sure all the surrounding things are handled when a note is
+  supposed to be played. If the node is failed, we abort, we always stop the
+  pulse if there is one from a previous node to prevent ghosts of our past
+  haunting us. We schedule led toggling if conductor and either stop the
+  watchdog if we play, or reset it if other node should play. */
   stopPulse(self, 0);
   if (self->failed)
     return 0;
@@ -360,6 +353,32 @@ int handleNote(App *self, int note) {
     return 1;
   }
   ASYNC(&watchdog, resetWatchdog, note);
+  return 0;
+}
+
+int safeCanSend(App *self, CANMsg *msg) {
+  if (CAN_SEND(&can0, msg)) {
+    // Failed to send message. Enter recovery mode if not conductor.
+    // If conductor keep going.
+    if (self->conductor)
+      return 1;
+    ASYNC(self, enterRecoveryMode, NULL);
+  }
+  self->failed = 0;
+  return 1;
+}
+
+int enterRecoveryMode(App *self, int UNUSED) {
+  /* When in recovery mode, we don't want to send any can messages except for
+  discovery pings. We set failed to 1 to prevent responding to discovery pings
+  to ensure that we can recover using discovery ping -> exitRecoveryMode */
+  ASYNC(&watchdog, stopWatchdog, NULL);
+  stopPulse(self, 0);
+  self->failed = 1;
+  print("Entering recovery mode\n");
+  // Start sending discovery pings to find other nodes and recover
+  // Since this enters safeCanSend it will recurse.
+  AFTER(MSEC(100), self, sendPing, NULL);
   return 0;
 }
 
@@ -537,7 +556,7 @@ int scheduleLedToggle(App *self, int melodyIndex) {
  */
 
 int pulse(App *self, int UNUSED) {
-  if (!self->sendingHeartbeats)
+  if (!self->sendingHeartbeats || self->failed)
     return 0;
   self->pulseTask = AFTER(MSEC(100), self, pulse, NULL);
   ASYNC(&watchdog, notifyWatchdog, NODE_ID);

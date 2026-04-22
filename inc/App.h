@@ -2,6 +2,7 @@
 #define _APP_H
 
 #include "TinyTimber.h"
+#include "canTinyTimber.h"
 
 #define INPUT_BUFFER_SIZE 10
 #define NODE_ID 1
@@ -70,11 +71,13 @@ int toggleLedMute(App *, int);
 int pulse(App *, int);
 int stopPulse(App *, int);
 int failureMode(App *, int);
+int enterRecoveryMode(App *, int);
 
 /*
  * Helper Functions
  */
 
+int safeCanSend(App *, CANMsg *);
 int parseBufferAsInt(App *);
 int getNodeOrder(App *, int);
 int getRegisteredNodeCount(App *, int);
