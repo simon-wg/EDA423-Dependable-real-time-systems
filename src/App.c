@@ -354,7 +354,6 @@ int handleNote(App *self, int note) {
     ASYNC(self, scheduleLedToggle, note);
   if (shouldPlayNote(self, note)) {
     ASYNC(&watchdog, stopWatchdog, NULL);
-    print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     self->sendingHeartbeats = 1;
     self->pulseTask = ASYNC(self, pulse, NULL);

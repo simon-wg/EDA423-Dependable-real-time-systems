@@ -39,16 +39,24 @@ int stopPlayback(MusicPlayer *self, int unused) {
 }
 
 int playNote(MusicPlayer *self, int melodyIndex) {
-  if (self->stopped)
+  if (self->stopped || self->currentlyPlaying)
     return 0;
 
+  self->currentlyPlaying = 1;
+  print("Playing note %d\n", melodyIndex);
   int period = calculatePeriod(MELODY[melodyIndex], self->key);
   int noteDuration = calculateNoteDuration(self->tempo, DURATIONS[melodyIndex]);
 
   BEFORE(USEC(100), &toneGenerator, startTone, period);
+  SEND(USEC(noteDuration) - MSEC(50), USEC(10), self, setCurrentlyPlaying, 0);
   SEND(USEC(noteDuration) - MSEC(50), MSEC(50), &toneGenerator, stopTone, NULL);
 
   AFTER(USEC(noteDuration), &app, sendNote, (melodyIndex + 1) % 32);
+  return 0;
+}
+
+int setCurrentlyPlaying(MusicPlayer *self, int playing) {
+  self->currentlyPlaying = playing;
   return 0;
 }
 
