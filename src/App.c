@@ -282,22 +282,8 @@ int sendSetTempoCommand(App *self, int tempo) {
 }
 
 int sendResetCommand(App *self, int unused) {
-  CANMsg tempoMsg;
-  CANMsg keyMsg;
-
-  tempoMsg.buff[0] = 4;
-  tempoMsg.buff[1] = 120;
-  keyMsg.buff[0] = 3;
-  keyMsg.buff[1] = 0;
-  tempoMsg.msgId = MSG_COMMAND;
-  keyMsg.msgId = MSG_COMMAND;
-  tempoMsg.nodeId = NODE_ID;
-  keyMsg.nodeId = NODE_ID;
-  tempoMsg.length = 2;
-  keyMsg.length = 2;
-
-  CAN_SEND(&can0, &tempoMsg);
-  CAN_SEND(&can0, &keyMsg);
+  ASYNC(self, sendSetTempoCommand, 120);
+  ASYNC(self, sendSetKeyCommand, 0);
   return 0;
 }
 

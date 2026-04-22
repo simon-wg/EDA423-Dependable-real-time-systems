@@ -25,6 +25,6 @@ typedef struct {
 int handleButtonPress(Button *, int);
 int handleButtonRelease(Button *, int);
 int enterConductorMode(Button *, int);
-int enterResetMode(Button *, int);
+int enterResetFailMode(Button *, int);
 
 #endif

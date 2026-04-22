@@ -28,9 +28,7 @@ int handleButtonPress(Button *self, int UNUSED) {
   sio0.meth = (Method)handleButtonRelease;
 
   // Schedule mode entry tasks
-  if (SYNC(&app, hasConductorRole, NULL)) {
-    self->resetTask = AFTER(SEC(2), self, enterResetMode, NULL);
-  }
+  self->resetTask = AFTER(SEC(2), self, enterResetFailMode, NULL);
   self->conductorTask = AFTER(SEC(5), self, enterConductorMode, NULL);
 
   return 0;
@@ -61,6 +59,7 @@ int handleButtonRelease(Button *self, int UNUSED) {
       ASYNC(&app, sendResetCommand, 0);
       break;
     }
+    break;
 
   case 2: // Hold >5 sec - claim conductor
     if (SYNC(&app, hasConductorRole, NULL)) {
@@ -88,8 +87,8 @@ int enterConductorMode(Button *self, int UNUSED) {
   return 0;
 }
 
-int enterResetMode(Button *self, int UNUSED) {
+int enterResetFailMode(Button *self, int UNUSED) {
   self->mode = 1;
-  print("Entered reset tempo and key mode\n");
+  print("Entered reset tempo and key mode/failure mode\n");
   return 0;
 }
