@@ -66,6 +66,7 @@ int getNoteDuration(MusicPlayer *self, int note) {
   return calculateNoteDuration(self->tempo, DURATIONS[note % 32]);
 }
 int getTempo(MusicPlayer *self, int unused) { return self->tempo; }
+int getKey(MusicPlayer *self, int unused) { return self->key; }
 
 /* ==========================================================================
  * Music Configuration

@@ -208,6 +208,7 @@ int processSerialCommand(App *self, int c) {
     break;
   case 'M':
     print("Current conductor: %d\n", self->currentConductor);
+    print("Is conductor: %d\n", self->conductor);
     for (int i = 0; i < NODES_SIZE; i++) {
       if (self->nodes[i] != 0) {
         print("Node %d: %d\n", i, self->nodes[i]);
@@ -291,8 +292,16 @@ int sendReply(App *self, int senderId) {
   msg.length = 1;
   msg.buff[0] = 1;
   safeCanSend(self, &msg);
-  if (self->conductor)
+  if (self->conductor) {
     ASYNC(self, sendConductorClaim, NULL);
+    if (SYNC(&musicPlayer, getPlayingState, NULL)) {
+      ASYNC(self, sendStartCommand, NULL);
+    } else {
+      ASYNC(self, sendStopCommand, NULL);
+    }
+    ASYNC(self, sendSetKeyCommand, SYNC(&musicPlayer, getKey, NULL));
+    ASYNC(self, sendSetTempoCommand, SYNC(&musicPlayer, getTempo, NULL));
+  }
   return 0;
 }
 
@@ -305,11 +314,6 @@ int sendHeartbeat(App *self, int unused) {
 }
 
 int sendConductorClaim(App *self, int unused) {
-  CANMsg msg;
-  msg.msgId = MSG_CONDUCTOR;
-  msg.nodeId = NODE_ID;
-  safeCanSend(self, &msg);
-
   if (!isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
     if (NODE_ID > self->currentConductor) {
       self->currentConductor = NODE_ID;
@@ -317,6 +321,11 @@ int sendConductorClaim(App *self, int unused) {
     }
     return 0;
   }
+
+  CANMsg msg;
+  msg.msgId = MSG_CONDUCTOR;
+  msg.nodeId = NODE_ID;
+  safeCanSend(self, &msg);
 
   T_RESET(&self->claimTimer);
   self->currentConductor = NODE_ID;

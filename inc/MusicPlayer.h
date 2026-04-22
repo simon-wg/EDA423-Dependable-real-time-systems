@@ -22,7 +22,7 @@ typedef struct {
   unsigned char currentlyPlaying;
 } MusicPlayer;
 
-#define initMusicPlayer() {initObject(), 120, 0, 0, 0}
+#define initMusicPlayer() {initObject(), 120, 0, 1, 0}
 
 /*
  * MusicPlayer Class Methods
@@ -34,6 +34,7 @@ int stopPlayback(MusicPlayer *, int);
 int setCurrentlyPlaying(MusicPlayer *, int);
 int getPlayingState(MusicPlayer *, int);
 int getTempo(MusicPlayer *, int);
+int getKey(MusicPlayer *, int);
 int getNoteDuration(MusicPlayer *, int);
 int getRawDuration(MusicPlayer *, int);
 int setTempoBpm(MusicPlayer *, int);
