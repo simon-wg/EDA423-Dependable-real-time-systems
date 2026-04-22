@@ -342,7 +342,7 @@ int handleNote(App *self, int note) {
   watchdog if we play, or reset it if other node should play. */
   stopPulse(self, 0);
   if (self->failed)
-    return 0;
+    return 1;
   if (self->conductor)
     ASYNC(self, scheduleLedToggle, note);
   if (shouldPlayNote(self, note)) {
@@ -580,6 +580,7 @@ int stopPulse(App *self, int UNUSED) {
 
 int failureMode(App *self, int UNUSED) {
   self->failed ^= 1;
+  SIO_WRITE(&sio0, self->failed);
   print("Failure mode: %s\n", self->failed ? "ON" : "OFF");
   if (self->failureMode == 1 && self->failed) {
     AFTER(SEC(7), self, failureMode, 0);

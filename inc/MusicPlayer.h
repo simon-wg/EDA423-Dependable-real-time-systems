@@ -22,7 +22,7 @@ typedef struct {
   unsigned char currentlyPlaying;
 } MusicPlayer;
 
-#define initMusicPlayer() {initObject(), 120, 0, 1, 0}
+#define initMusicPlayer() {initObject(), 120, 0, 0, 0}
 
 /*
  * MusicPlayer Class Methods
