@@ -36,6 +36,8 @@ int checkTimeout(Watchdog *self, int unused) {
     T_RESET(&self->heartBeatTimer);
     if (SYNC(&app, shouldPlayNote, self->currentNote)) {
       ASYNC(&app, sendNote, self->currentNote);
+      ASYNC(self, stopWatchdog, NULL);
+      return 0;
     }
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);

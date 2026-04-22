@@ -362,17 +362,18 @@ int sendNote(App *self, int note) {
 
 int handleNote(App *self, int note) {
   stopPulse(self, 0);
-  ASYNC(&watchdog, resetWatchdog, note);
   if (self->conductor) {
     ASYNC(self, scheduleLedToggle, note);
   }
   if (shouldPlayNote(self, note)) {
+    ASYNC(&watchdog, stopWatchdog, NULL);
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     self->sendingHeartbeats = 1;
     self->pulseTask = ASYNC(self, pulse, NULL);
     return 1;
   }
+  ASYNC(&watchdog, resetWatchdog, note);
   return 0;
 }
 
