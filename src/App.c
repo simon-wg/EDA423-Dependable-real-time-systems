@@ -348,6 +348,8 @@ int sendNote(App *self, int note) {
 
 int handleNote(App *self, int note) {
   stopPulse(self, 0);
+  if (self->failed)
+    return 0;
   if (self->conductor)
     ASYNC(self, scheduleLedToggle, note);
   if (shouldPlayNote(self, note)) {
