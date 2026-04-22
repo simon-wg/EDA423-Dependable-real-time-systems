@@ -125,15 +125,7 @@ int handleCanMessage(App *self, int unused) {
     if (self->failed) {
       return 0;
     }
-    if (self->conductor) {
-      ASYNC(self, scheduleLedToggle, msg.buff[0]);
-    }
-    if (shouldPlayNote(self, msg.buff[0])) {
-      print("Playing note %d\n", msg.buff[0]);
-      ASYNC(self, scheduleHeartbeats, msg.buff[0]);
-      ASYNC(&musicPlayer, playNote, msg.buff[0]);
-    }
-    ASYNC(&watchdog, resetWatchdog, msg.buff[0]);
+    ASYNC(self, handleNote, msg.buff[0]);
     break;
   case MSG_HEARTBEAT:
     if (self->failed) {
@@ -220,6 +212,7 @@ int processSerialCommand(App *self, int c) {
       case 1:
         SYNC(&musicPlayer, stopPlayback, 0);
         ASYNC(self, sendStopCommand, 0);
+        SYNC(&watchdog, stopWatchdog, 0);
         break;
       }
     }
@@ -356,21 +349,31 @@ int sendConductorClaim(App *self, int unused) {
 }
 
 int sendNote(App *self, int note) {
-  if (self->conductor) {
-    ASYNC(self, scheduleLedToggle, note);
-  }
-  if (shouldPlayNote(self, note)) {
-    print("Playing note %d\n", note);
-    BEFORE(USEC(50), &musicPlayer, playNote, note);
-    ASYNC(self, scheduleHeartbeats, note);
-  }
-  ASYNC(&watchdog, resetWatchdog, note);
+  if (handleNote(self, note))
+    return 0;
+
+  ASYNC(self, stopPulse, NULL);
   CANMsg msg;
   msg.buff[0] = note;
   msg.length = 1;
   msg.msgId = MSG_NOTE;
   msg.nodeId = NODE_ID;
   CAN_SEND(&can0, &msg);
+  return 0;
+}
+
+int handleNote(App *self, int note) {
+  ASYNC(&watchdog, resetWatchdog, note);
+  if (self->conductor) {
+    ASYNC(self, scheduleLedToggle, note);
+  }
+  if (shouldPlayNote(self, note)) {
+    print("Playing note %d\n", note);
+    BEFORE(USEC(50), &musicPlayer, playNote, note);
+    self->sendingHeartbeats = 1;
+    ASYNC(self, pulse, NULL);
+    return 1;
+  }
   return 0;
 }
 
@@ -547,13 +550,16 @@ int scheduleLedToggle(App *self, int melodyIndex) {
  * ==========================================================================
  */
 
-int scheduleHeartbeats(App *self, int melodyIndex) {
-  // noteDuration is in microseconds
-  int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
-  for (int i = 0; i < noteDuration; i += 100000) {
-    AFTER(USEC(i), self, sendHeartbeat, NULL);
-    AFTER(USEC(i), &watchdog, notifyWatchdog, NODE_ID);
-  }
+int pulse(App *self, int UNUSED) {
+  if (!self->sendingHeartbeats)
+    return 0;
+  AFTER(MSEC(10), self, pulse, NULL);
+  ASYNC(self, sendHeartbeat, NULL);
+  return 0;
+}
+
+int stopPulse(App *self, int UNUSED) {
+  self->sendingHeartbeats = 0;
   return 0;
 }
 

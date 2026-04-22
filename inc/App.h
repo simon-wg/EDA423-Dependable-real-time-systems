@@ -30,10 +30,11 @@ typedef struct {
   unsigned char conductor;
   unsigned char currentConductor;
   unsigned char failed;
+  unsigned char sendingHeartbeats;
   unsigned char nodes[NODES_SIZE];
 } App;
 
-#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, {NODE_ID, 0, 0}}
+#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, {NODE_ID, 0, 0}}
 
 /*
  * App Class Methods
@@ -55,6 +56,7 @@ int sendHeartbeat(App *, int);
 int sendConductorClaim(App *, int);
 int getCurrentConductor(App *, int);
 int sendNote(App *, int);
+int handleNote(App *, int);
 int registerNode(App *, int);
 int deleteNode(App *, int);
 int getExpectedNodeForNote(App *, int);
@@ -63,7 +65,8 @@ int appendToBuffer(App *, int);
 int scheduleLedToggle(App *, int);
 int toggleLed(App *, int);
 int toggleLedMute(App *, int);
-int scheduleHeartbeats(App *, int);
+int pulse(App *, int);
+int stopPulse(App *, int);
 int failureMode(App *, int);
 
 /*
