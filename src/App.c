@@ -554,6 +554,7 @@ int pulse(App *self, int UNUSED) {
   if (!self->sendingHeartbeats)
     return 0;
   AFTER(MSEC(10), self, pulse, NULL);
+  ASYNC(&watchdog, notifyWatchdog, NODE_ID);
   ASYNC(self, sendHeartbeat, NULL);
   return 0;
 }
