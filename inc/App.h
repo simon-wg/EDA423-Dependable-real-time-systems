@@ -33,9 +33,10 @@ typedef struct {
   unsigned char sendingHeartbeats;
   Msg pulseTask;
   unsigned char nodes[NODES_SIZE];
+  unsigned char failureMode;
 } App;
 
-#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, NULL, {NODE_ID, 0, 0}}
+#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, NULL, {NODE_ID, 0, 0}, 0}
 
 /*
  * App Class Methods

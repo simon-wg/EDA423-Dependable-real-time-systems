@@ -163,8 +163,8 @@ int processSerialCommand(App *self, int c) {
   uint8_t volume;
 
   switch (c) {
-  case 'F':
-    ASYNC(self, clearInputBuffer, 0);
+  case 'f':
+    self->failureMode ^= 1;
     break;
   case 'd':
     sendPing(self, 0);
@@ -559,9 +559,10 @@ int stopPulse(App *self, int UNUSED) {
  * ==========================================================================
  */
 
-int failureMode(App *self, int mode) {
+int failureMode(App *self, int UNUSED) {
   self->failed ^= 1;
-  if (mode == 2) {
+  print("Failure mode: %s\n", self->failed ? "ON" : "OFF");
+  if (self->failureMode == 1 && self->failed) {
     AFTER(SEC(7), self, failureMode, 0);
   }
   return 0;
