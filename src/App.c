@@ -370,8 +370,7 @@ int handleNote(App *self, int note) {
     print("Playing note %d\n", note);
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     self->sendingHeartbeats = 1;
-    // Use 11 to guarantee bla bla pidgeonhole principle
-    AFTER(MSEC(11), self, pulse, NULL);
+    self->pulseTask = ASYNC(self, pulse, NULL);
     return 1;
   }
   return 0;
@@ -553,13 +552,14 @@ int scheduleLedToggle(App *self, int melodyIndex) {
 int pulse(App *self, int UNUSED) {
   if (!self->sendingHeartbeats)
     return 0;
-  AFTER(MSEC(10), self, pulse, NULL);
+  self->pulseTask = AFTER(MSEC(100), self, pulse, NULL);
   ASYNC(&watchdog, notifyWatchdog, NODE_ID);
   ASYNC(self, sendHeartbeat, NULL);
   return 0;
 }
 
 int stopPulse(App *self, int UNUSED) {
+  ABORT(self->pulseTask);
   self->sendingHeartbeats = 0;
   return 0;
 }

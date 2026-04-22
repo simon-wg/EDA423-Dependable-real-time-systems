@@ -31,10 +31,11 @@ typedef struct {
   unsigned char currentConductor;
   unsigned char failed;
   unsigned char sendingHeartbeats;
+  Msg pulseTask;
   unsigned char nodes[NODES_SIZE];
 } App;
 
-#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, {NODE_ID, 0, 0}}
+#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, NULL, {NODE_ID, 0, 0}}
 
 /*
  * App Class Methods
