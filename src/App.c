@@ -545,7 +545,10 @@ int pulse(App *self, int UNUSED) {
 }
 
 int stopPulse(App *self, int UNUSED) {
+  if (!self->pulseTask)
+    return 0;
   ABORT(self->pulseTask);
+  self->pulseTask = NULL;
   self->sendingHeartbeats = 0;
   return 0;
 }

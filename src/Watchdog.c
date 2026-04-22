@@ -15,7 +15,7 @@ extern MusicPlayer musicPlayer;
 int resetWatchdog(Watchdog *self, int noteIndex) {
   T_RESET(&self->heartBeatTimer);
   self->currentNote = noteIndex;
-  ABORT(self->checkTimeoutTask);
+  stopWatchdog(self, 0);
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);
   return 0;
 }
@@ -44,6 +44,9 @@ int checkTimeout(Watchdog *self, int unused) {
 }
 
 int stopWatchdog(Watchdog *self, int unused) {
+  if (!self->checkTimeoutTask)
+    return 0;
   ABORT(self->checkTimeoutTask);
+  self->checkTimeoutTask = NULL;
   return 0;
 }
