@@ -584,5 +584,7 @@ int failureMode(App *self, int UNUSED) {
   if (self->failureMode == 1 && self->failed) {
     AFTER(SEC(7), self, failureMode, 0);
   }
+  if (!self->failed)
+    ASYNC(self, sendPing, NULL);
   return 0;
 }
