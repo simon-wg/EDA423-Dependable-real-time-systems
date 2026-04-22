@@ -362,9 +362,8 @@ int sendNote(App *self, int note) {
 
 int handleNote(App *self, int note) {
   stopPulse(self, 0);
-  if (self->conductor) {
+  if (self->conductor)
     ASYNC(self, scheduleLedToggle, note);
-  }
   if (shouldPlayNote(self, note)) {
     ASYNC(&watchdog, stopWatchdog, NULL);
     print("Playing note %d\n", note);

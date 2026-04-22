@@ -11,12 +11,11 @@
 typedef struct {
   Object super;
   Timer heartBeatTimer;
-  Timer nextNoteTimer;
   uint16_t currentNote;
   Msg checkTimeoutTask;
 } Watchdog;
 
-#define initWatchdog() {initObject(), initTimer(), initTimer(), 0, NULL}
+#define initWatchdog() {initObject(), initTimer(), 0, NULL}
 
 /*
  * Watchdog Class Methods
