@@ -84,6 +84,9 @@ int setTempoBpm(MusicPlayer *self, int tempo) {
 }
 
 int setKeyOffset(MusicPlayer *self, int key) {
+  char realKey = (char)key;
+  print("Key received %d\n", key);
+  print("Setting key offset to %d\n", realKey);
   if (key < -5) {
     key = -5;
   } else if (key > 5) {

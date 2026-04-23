@@ -87,9 +87,11 @@ int handleCanMessage(App *self, int unused) {
     case 2: // Stop melody command
       print("Stopping playback\n");
       ASYNC(&musicPlayer, stopPlayback, 0);
+      ASYNC(&watchdog, stopWatchdog, 0);
+      ASYNC(self, stopPulse, 0);
       break;
     case 3: // Key command
-      ASYNC(&musicPlayer, setKeyOffset, msg.buff[1]);
+      ASYNC(&musicPlayer, setKeyOffset, (int)(int8_t)msg.buff[1]);
       break;
     case 4: // Tempo command
       ASYNC(&musicPlayer, setTempoBpm, (msg.buff[1] << 8) | msg.buff[2]);
@@ -115,12 +117,14 @@ int handleCanMessage(App *self, int unused) {
 
   case MSG_NOTE:
     ASYNC(self, handleNote, msg.buff[0]);
-    int failedNode = msg.buff[1];
-    if (failedNode) {
-      if (failedNode == NODE_ID) {
-        ASYNC(self, sendPing, NULL);
-      } else {
-        ASYNC(self, deleteNode, failedNode);
+    if (msg.length > 1) {
+      int failedNode = msg.buff[1];
+      if (failedNode) {
+        if (failedNode == NODE_ID) {
+          ASYNC(self, sendPing, NULL);
+        } else {
+          ASYNC(self, deleteNode, failedNode);
+        }
       }
     }
 
@@ -368,6 +372,7 @@ int handleNote(App *self, int note) {
   pulse if there is one from a previous node to prevent ghosts of our past
   haunting us. We schedule led toggling if conductor and either stop the
   watchdog if we play, or reset it if other node should play. */
+  print("Handling note %d\n", note);
   stopPulse(self, 0);
   if (self->failed)
     return 0;
@@ -388,7 +393,9 @@ int safeCanSend(App *self, CANMsg *msg) {
   if (CAN_SEND(&can0, msg)) {
     // Failed to send message. Enter recovery mode if not conductor.
     // If conductor keep going.
-    if (self->conductor)
+    // According to Problem 3 we should just keep playing if conductor in a 2
+    // board setup.
+    if (self->conductor && getRegisteredNodeCount(self, 0) > 2)
       return 1;
     ASYNC(self, enterRecoveryMode, NULL);
   }
@@ -404,6 +411,8 @@ int enterRecoveryMode(App *self, int UNUSED) {
   /* When in recovery mode, we don't want to send any can messages except for
   discovery pings. We set failed to 1 to prevent responding to discovery pings
   to ensure that we can recover using discovery ping -> exitRecoveryMode */
+  setConductorMode(self, 0);
+  ASYNC(&musicPlayer, stopPlayback, NULL);
   ASYNC(&watchdog, stopWatchdog, NULL);
   stopPulse(self, 0);
   self->failed = 1;

@@ -28,7 +28,7 @@ int handleButtonPress(Button *self, int UNUSED) {
   sio0.meth = (Method)handleButtonRelease;
 
   // Schedule mode entry tasks
-  self->resetTask = AFTER(SEC(2), self, enterResetFailMode, NULL);
+  self->failTask = AFTER(SEC(2), self, enterFailureMode, NULL);
   self->conductorTask = AFTER(SEC(5), self, enterConductorMode, NULL);
 
   return 0;
@@ -41,20 +41,20 @@ int handleButtonPress(Button *self, int UNUSED) {
 int handleButtonRelease(Button *self, int UNUSED) {
   switch (self->mode) {
   case 0: // Momentary press - toggle mute
-    ABORT(self->resetTask);
+    ABORT(self->failTask);
+    self->failTask = NULL;
     ABORT(self->conductorTask);
+    self->conductorTask = NULL;
     ASYNC(&musicPlayer, toggleLedMute, NULL);
     break;
 
   case 1: // Hold 2-5 sec - reset tempo and key
     ABORT(self->conductorTask);
+    self->conductorTask = NULL;
     ASYNC(&app, failureMode, NULL);
     break;
 
   case 2: // Hold >5 sec - claim conductor
-    if (SYNC(&app, hasConductorRole, NULL)) {
-      break;
-    }
     ASYNC(&app, sendConductorClaim, 0);
     break;
   }
@@ -77,8 +77,8 @@ int enterConductorMode(Button *self, int UNUSED) {
   return 0;
 }
 
-int enterResetFailMode(Button *self, int UNUSED) {
+int enterFailureMode(Button *self, int UNUSED) {
   self->mode = 1;
-  print("Entered reset tempo and key mode/failure mode\n");
+  print("Entered failure mode\n");
   return 0;
 }
