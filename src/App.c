@@ -364,6 +364,7 @@ int handleNote(App *self, int note) {
   pulse if there is one from a previous node to prevent ghosts of our past
   haunting us. We schedule led toggling if conductor and either stop the
   watchdog if we play, or reset it if other node should play. */
+  print("Handle note received: %d\n", note);
   stopPulse(self, 0);
   if (self->failed)
     return 0;
