@@ -333,12 +333,15 @@ int sendConductorClaim(App *self, int unused) {
   return 0;
 }
 
-int sendNote(App *self, int note) {
-  if (handleNote(self, note))
+int sendNote(App *self, int failedNodeAndNote) {
+  int failedNode = (failedNodeAndNote >> 8) & 0xFF;
+  int note = failedNodeAndNote & 0xFF;
+  if (handleNote(self, note) && !failedNode)
     return 0;
   CANMsg msg;
   msg.buff[0] = note;
-  msg.length = 1;
+  msg.buff[1] = failedNode;
+  msg.length = 2;
   msg.msgId = MSG_NOTE;
   msg.nodeId = NODE_ID;
   safeCanSend(self, &msg);
@@ -375,6 +378,10 @@ int safeCanSend(App *self, CANMsg *msg) {
       return 1;
     ASYNC(self, enterRecoveryMode, NULL);
   }
+  if (self->failed) {
+    ASYNC(&musicPlayer, toggleLedMute, NULL);
+    ASYNC(&musicPlayer, toggleLedMute, NULL);
+  }
   self->failed = 0;
   return 1;
 }
@@ -386,6 +393,8 @@ int enterRecoveryMode(App *self, int UNUSED) {
   ASYNC(&watchdog, stopWatchdog, NULL);
   stopPulse(self, 0);
   self->failed = 1;
+  // 1 means light off.
+  SIO_WRITE(&sio0, 1);
   print("Entering recovery mode\n");
   // Start sending discovery pings to find other nodes and recover
   // Since this enters safeCanSend it will recurse.

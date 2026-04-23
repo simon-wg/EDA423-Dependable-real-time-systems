@@ -33,7 +33,13 @@ int checkTimeout(Watchdog *self, int unused) {
           failedNode);
     SYNC(&app, deleteNode, failedNode);
     T_RESET(&self->heartBeatTimer);
-    if (SYNC(&app, shouldPlayNote, self->currentNote)) {
+
+    int currentConductor = SYNC(&app, getCurrentConductor, NULL);
+    if (failedNode == currentConductor) {
+      ASYNC(&app, sendConductorClaim, NULL);
+    }
+
+    if (SYNC(&app, shouldPlayNote, self->currentNote & (failedNode << 8))) {
       ASYNC(&app, sendNote, self->currentNote);
       ASYNC(self, stopWatchdog, NULL);
       return 0;
