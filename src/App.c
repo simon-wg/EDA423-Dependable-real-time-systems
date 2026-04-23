@@ -127,7 +127,6 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_HEARTBEAT:
-    print("Heartbeat received from node %d\n", msg.nodeId);
     ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
 
@@ -224,6 +223,11 @@ int processSerialCommand(App *self, int c) {
       }
     }
     ASYNC(self, clearInputBuffer, 0);
+    break;
+  case 'R':
+    ASYNC(self, setTempoBpm, 120);
+    ASYNC(self, setKeyOffset, 0);
+    ASYNC(self, sendResetCommand, 0);
     break;
   default:
     ASYNC(self, appendToBuffer, c);
@@ -364,7 +368,6 @@ int handleNote(App *self, int note) {
   pulse if there is one from a previous node to prevent ghosts of our past
   haunting us. We schedule led toggling if conductor and either stop the
   watchdog if we play, or reset it if other node should play. */
-  print("Handle note received: %d\n", note);
   stopPulse(self, 0);
   if (self->failed)
     return 0;

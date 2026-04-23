@@ -48,17 +48,7 @@ int handleButtonRelease(Button *self, int UNUSED) {
 
   case 1: // Hold 2-5 sec - reset tempo and key
     ABORT(self->conductorTask);
-    switch (SYNC(&app, hasConductorRole, NULL)) {
-    case 0: // Not conductor - Failure mode
-      // FAILURE MODE CODE LATER
-      ASYNC(&app, failureMode, NULL);
-      break;
-    case 1: // Conductor - reset tempo and key
-      ASYNC(&musicPlayer, setTempoBpm, 120);
-      ASYNC(&musicPlayer, setKeyOffset, 0);
-      ASYNC(&app, sendResetCommand, 0);
-      break;
-    }
+    ASYNC(&app, failureMode, NULL);
     break;
 
   case 2: // Hold >5 sec - claim conductor
