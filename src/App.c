@@ -31,14 +31,14 @@ static void handleConductorMessage(App *self, int nodeId) {
     T_RESET(&self->claimTimer);
     self->currentConductor = nodeId;
     if (self->conductor) {
-      toggleConductorMode(self);
+      setConductorMode(self, 0);
     }
     return;
   }
   if (nodeId > self->currentConductor) {
     self->currentConductor = nodeId;
     if (self->conductor) {
-      toggleConductorMode(self);
+      setConductorMode(self, 0);
     }
   }
 }
@@ -143,7 +143,7 @@ int handleSerialInput(App *self, int c) {
 
 int processSerialCommand(App *self, int c) {
   if (c == 'c') {
-    ASYNC(self, toggleConductorMode, 0);
+    ASYNC(self, setConductorMode, self->conductor ^ 1);
     return 0;
   }
 
@@ -317,7 +317,7 @@ int sendConductorClaim(App *self, int unused) {
   if (!isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
     if (NODE_ID > self->currentConductor) {
       self->currentConductor = NODE_ID;
-      toggleConductorMode(self);
+      setConductorMode(self, 1);
     }
     return 0;
   }
@@ -329,7 +329,7 @@ int sendConductorClaim(App *self, int unused) {
 
   T_RESET(&self->claimTimer);
   self->currentConductor = NODE_ID;
-  toggleConductorMode(self);
+  setConductorMode(self, 1);
   return 0;
 }
 
@@ -398,8 +398,8 @@ int enterRecoveryMode(App *self, int UNUSED) {
  * ==========================================================================
  */
 
-void toggleConductorMode(App *self) {
-  self->conductor = !self->conductor;
+void setConductorMode(App *self, int conductor) {
+  self->conductor = conductor;
   print("Conductor mode: %s\n", self->conductor ? "ON" : "OFF");
 
   if (!self->conductor) {

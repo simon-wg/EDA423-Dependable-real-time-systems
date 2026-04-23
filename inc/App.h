@@ -84,6 +84,6 @@ int getRegisteredNodeCount(App *, int);
 int shouldPlayNote(App *, int);
 int hasConductorRole(App *, int);
 int isClaimTimedOut(App *, int);
-void toggleConductorMode(App *);
+void setConductorMode(App *, int);
 
 #endif
