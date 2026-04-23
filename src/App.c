@@ -115,6 +115,15 @@ int handleCanMessage(App *self, int unused) {
 
   case MSG_NOTE:
     ASYNC(self, handleNote, msg.buff[0]);
+    int failedNode = msg.buff[1];
+    if (failedNode) {
+      if (failedNode == NODE_ID) {
+        ASYNC(self, sendPing, NULL);
+      } else {
+        ASYNC(self, deleteNode, failedNode);
+      }
+    }
+
     break;
 
   case MSG_HEARTBEAT:
@@ -336,8 +345,9 @@ int sendConductorClaim(App *self, int unused) {
 int sendNote(App *self, int failedNodeAndNote) {
   int failedNode = (failedNodeAndNote >> 8) & 0xFF;
   int note = failedNodeAndNote & 0xFF;
-  if (handleNote(self, note) && !failedNode)
+  if (!self->failed)
     return 0;
+  handleNote(self, note);
   CANMsg msg;
   msg.buff[0] = note;
   msg.buff[1] = failedNode;
@@ -356,7 +366,7 @@ int handleNote(App *self, int note) {
   watchdog if we play, or reset it if other node should play. */
   stopPulse(self, 0);
   if (self->failed)
-    return 1;
+    return 0;
   if (self->conductor)
     ASYNC(self, scheduleLedToggle, note);
   if (shouldPlayNote(self, note)) {
@@ -364,7 +374,7 @@ int handleNote(App *self, int note) {
     BEFORE(USEC(50), &musicPlayer, playNote, note);
     self->sendingHeartbeats = 1;
     self->pulseTask = ASYNC(self, pulse, NULL);
-    return 1;
+    return 0;
   }
   ASYNC(&watchdog, resetWatchdog, note);
   return 0;
@@ -488,6 +498,7 @@ int deleteNode(App *self, int nodeId) {
       return 0;
     }
   }
+  print("Attempted to delete non-existent node %d\n", nodeId);
   return 0;
 }
 
@@ -602,10 +613,12 @@ int failureMode(App *self, int UNUSED) {
   self->failed ^= 1;
   SIO_WRITE(&sio0, self->failed);
   print("Failure mode: %s\n", self->failed ? "ON" : "OFF");
-  if (self->failureMode == 1 && self->failed) {
-    AFTER(SEC(7), self, failureMode, 0);
-  }
-  if (!self->failed)
+  if (self->failed) {
+    ASYNC(&watchdog, stopWatchdog, NULL);
+    if (self->failureMode == 1)
+      AFTER(SEC(7), self, failureMode, 0);
+  } else {
     ASYNC(self, sendPing, NULL);
+  }
   return 0;
 }

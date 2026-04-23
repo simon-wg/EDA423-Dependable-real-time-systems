@@ -39,11 +39,11 @@ int checkTimeout(Watchdog *self, int unused) {
       ASYNC(&app, sendConductorClaim, NULL);
     }
 
-    if (SYNC(&app, shouldPlayNote, self->currentNote & (failedNode << 8))) {
-      ASYNC(&app, sendNote, self->currentNote);
+    if (SYNC(&app, shouldPlayNote, self->currentNote)) {
       ASYNC(self, stopWatchdog, NULL);
       return 0;
     }
+    ASYNC(&app, sendNote, self->currentNote & (failedNode << 8));
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);
   return 0;
