@@ -345,7 +345,7 @@ int sendConductorClaim(App *self, int unused) {
 int sendNote(App *self, int failedNodeAndNote) {
   int failedNode = (failedNodeAndNote >> 8) & 0xFF;
   int note = failedNodeAndNote & 0xFF;
-  if (!self->failed)
+  if (self->failed)
     return 0;
   handleNote(self, note);
   CANMsg msg;
