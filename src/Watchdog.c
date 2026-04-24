@@ -12,6 +12,7 @@ extern MusicPlayer musicPlayer;
  * Watchdog Control
  * ========================================================================== */
 
+// Removes old watchdog task and starts a new one for a given noteIndex.
 int resetWatchdog(Watchdog *self, int noteIndex) {
   T_RESET(&self->heartBeatTimer);
   self->currentNote = noteIndex;
@@ -21,12 +22,15 @@ int resetWatchdog(Watchdog *self, int noteIndex) {
   return 0;
 }
 
+// Notifies the watchdog that a heartbeat has been received from a node.
 int notifyWatchdog(Watchdog *self, int nodeId) {
   if (self->currentNode == nodeId)
     T_RESET(&self->heartBeatTimer);
   return 0;
 }
 
+// Runs periodically to check if expected heartbeats have been received in time.
+// Has a 200ms timeout, and runs every 100ms.
 int checkTimeout(Watchdog *self, int unused) {
   print("Checking if node %d has timed out for note %d\n", self->currentNode,
         self->currentNote);
@@ -49,6 +53,7 @@ int checkTimeout(Watchdog *self, int unused) {
   return 0;
 }
 
+// Stops the watchdog from checking for timeouts.
 int stopWatchdog(Watchdog *self, int unused) {
   if (!self->checkTimeoutTask)
     return 0;

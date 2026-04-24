@@ -26,8 +26,10 @@ static int compare(const void *a, const void *b) {
   return *valA - *valB;
 }
 
+// Helper function to handle conductor claim arbitration
+// Makes sure the highest nodeId within a 100ms window
 static void handleConductorMessage(App *self, int nodeId) {
-  if (isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
+  if (isClaimTimedOut(self, CLAIM_TIMEOUT_MSEC)) {
     T_RESET(&self->claimTimer);
     self->currentConductor = nodeId;
     if (self->conductor) {
@@ -71,6 +73,8 @@ int initialize(App *self, int arg) {
 int handleCanMessage(App *self, int unused) {
   CANMsg msg;
   CAN_RECEIVE(&can0, &msg);
+
+  // Emulate silent failure by not processing any CAN messages if failed.
   if (self->failed)
     return 0;
 
@@ -157,38 +161,39 @@ int handleSerialInput(App *self, int c) {
 }
 
 int processSerialCommand(App *self, int c) {
-  if (c == 'c') {
-    ASYNC(self, setConductorMode, self->conductor ^ 1);
-    return 0;
-  }
-
   int tmp;
   uint8_t volume;
 
   switch (c) {
+  // Toggle failure mode type
   case 'f':
     self->failureMode ^= 1;
     print("Failure mode type: %s\n", self->failureMode ? "F2" : "F1");
     break;
+  // Discover nodes
   case 'd':
     sendPing(self, 0);
     ASYNC(self, clearInputBuffer, 0);
     break;
+  // Toggle mute
   case 'm':
     ASYNC(self, clearInputBuffer, 0);
     if (self->conductor)
       ASYNC(&musicPlayer, toggleLedMute, NULL);
     break;
+  // Increase volume
   case 'i':
     ASYNC(self, clearInputBuffer, 0);
     volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
     ASYNC(&toneGenerator, setOutputVolume, volume + 1);
     break;
+  // Decrease volume
   case 'u':
     ASYNC(self, clearInputBuffer, 0);
     volume = SYNC(&toneGenerator, getCurrentVolume, NULL);
     ASYNC(&toneGenerator, setOutputVolume, volume - 1);
     break;
+  // Set key
   case 'k':
     tmp = parseBufferAsInt(self);
     ASYNC(self, sendSetKeyCommand, tmp);
@@ -196,6 +201,7 @@ int processSerialCommand(App *self, int c) {
     if (self->conductor)
       ASYNC(&musicPlayer, setKeyOffset, tmp);
     break;
+  // Set tempo
   case 't':
     tmp = parseBufferAsInt(self);
     ASYNC(self, sendSetTempoCommand, tmp);
@@ -203,6 +209,7 @@ int processSerialCommand(App *self, int c) {
     if (self->conductor)
       ASYNC(&musicPlayer, setTempoBpm, tmp);
     break;
+  // Play/stop toggle
   case 'p':
     tmp = SYNC(&musicPlayer, getPlayingState, NULL);
     ASYNC(self, clearInputBuffer, 0);
@@ -221,6 +228,7 @@ int processSerialCommand(App *self, int c) {
       }
     }
     break;
+  // Print network state
   case 'M':
     print("Current conductor: %d\n", self->currentConductor);
     print("Is conductor: %d\n", self->conductor);
@@ -231,6 +239,7 @@ int processSerialCommand(App *self, int c) {
     }
     ASYNC(self, clearInputBuffer, 0);
     break;
+  // Reset tempo and key
   case 'R':
     ASYNC(self, setTempoBpm, 120);
     ASYNC(self, setKeyOffset, 0);
@@ -248,6 +257,7 @@ int processSerialCommand(App *self, int c) {
  * ==========================================================================
  */
 
+// Sends a message to set status to playing.
 int sendStartCommand(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
@@ -258,6 +268,7 @@ int sendStartCommand(App *self, int unused) {
   return 0;
 }
 
+// Sends a message to set status to stopped.
 int sendStopCommand(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
@@ -268,6 +279,7 @@ int sendStopCommand(App *self, int unused) {
   return 0;
 }
 
+// Sends a message to set key
 int sendSetKeyCommand(App *self, int key) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
@@ -279,6 +291,7 @@ int sendSetKeyCommand(App *self, int key) {
   return 0;
 }
 
+// Tempo is a 16 bit value, so we need to split it into two bytes.
 int sendSetTempoCommand(App *self, int tempo) {
   CANMsg msg;
   msg.msgId = MSG_COMMAND;
@@ -291,12 +304,14 @@ int sendSetTempoCommand(App *self, int tempo) {
   return 0;
 }
 
+// Sends a message to reset key and tempo.
 int sendResetCommand(App *self, int unused) {
   ASYNC(self, sendSetTempoCommand, 120);
   ASYNC(self, sendSetKeyCommand, 0);
   return 0;
 }
 
+// Sends a discovery ping to find other nodes.
 int sendPing(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_PING;
@@ -305,6 +320,8 @@ int sendPing(App *self, int unused) {
   return 0;
 }
 
+// Sends a reply to a discovery ping. If we are conductor, also sends conductor
+// claim along with current state.
 int sendReply(App *self, int senderId) {
   CANMsg msg;
   msg.msgId = MSG_REPLY;
@@ -325,6 +342,7 @@ int sendReply(App *self, int senderId) {
   return 0;
 }
 
+// Sends a heartbeat message to notify other nodes that we are alive.
 int sendHeartbeat(App *self, int unused) {
   CANMsg msg;
   msg.msgId = MSG_HEARTBEAT;
@@ -333,8 +351,9 @@ int sendHeartbeat(App *self, int unused) {
   return 0;
 }
 
+// Sends a conductor claim message.
 int sendConductorClaim(App *self, int unused) {
-  if (!isClaimTimedOut(self, CLAIM_TIMEOUT_SEC)) {
+  if (!isClaimTimedOut(self, CLAIM_TIMEOUT_MSEC)) {
     if (NODE_ID > self->currentConductor) {
       self->currentConductor = NODE_ID;
       setConductorMode(self, 1);
@@ -353,6 +372,7 @@ int sendConductorClaim(App *self, int unused) {
   return 0;
 }
 
+// Sends a note for others to play.
 int sendNote(App *self, int noteIdx) {
   if (self->failed)
     return 0;
@@ -366,6 +386,7 @@ int sendNote(App *self, int noteIdx) {
   return 0;
 }
 
+// Sends a message claiming that a node has failed.
 int sendNodeFailure(App *self, int nodeId) {
   CANMsg msg;
   msg.buff[0] = nodeId;
@@ -417,37 +438,18 @@ int safeCanSend(App *self, CANMsg *msg) {
   return 1;
 }
 
-int enterRecoveryMode(App *self, int UNUSED) {
-  /* When in recovery mode, we don't want to send any can messages except for
-  discovery pings. We set failed to 1 to prevent responding to discovery pings
-  to ensure that we can recover using discovery ping -> exitRecoveryMode */
-  setConductorMode(self, 0);
-  self->currentConductor = 0;
-  ASYNC(&musicPlayer, stopPlayback, NULL);
-  ASYNC(&watchdog, stopWatchdog, NULL);
-  stopPulse(self, 0);
-  self->failed = 1;
-  // 1 means light off.
-  SIO_WRITE(&sio0, 1);
-  print("Entering recovery mode\n");
-  // Start sending discovery pings to find other nodes and recover
-  // Since this enters safeCanSend it will recurse.
-  AFTER(MSEC(100), self, sendPing, NULL);
-  return 0;
-}
-
 /* ==========================================================================
  * Conductor Mode Management
  * ==========================================================================
  */
 
+// Sets local state conductor mode and updates LED to be correct.
 void setConductorMode(App *self, int conductor) {
   self->conductor = conductor;
   print("Conductor mode: %s\n", self->conductor ? "ON" : "OFF");
 
   if (!self->conductor) {
     // Set light to the actual muted state when losing conductor status
-
     ASYNC(&musicPlayer, toggleLedMute, NULL);
     ASYNC(&musicPlayer, toggleLedMute, NULL);
   } else {
@@ -456,13 +458,14 @@ void setConductorMode(App *self, int conductor) {
   }
 }
 
-int hasConductorRole(App *self, int unused) { return self->conductor; }
-
+// Helper to check if > CLAIM_TIMEOUT_MSEC ms has passed since last claim
+// message received/sent.
 int isClaimTimedOut(App *self, int ms) {
   Time timeSinceLast = T_SAMPLE(&self->claimTimer);
-  return timeSinceLast > 2 * MSEC(ms);
+  return timeSinceLast > MSEC(ms);
 }
 
+// Getter for current conductor to be used in the watchdog.
 int getCurrentConductor(App *self, int unused) {
   return self->currentConductor;
 }
@@ -472,11 +475,13 @@ int getCurrentConductor(App *self, int unused) {
  * ==========================================================================
  */
 
+// Clears the input buffer by resetting the index to 0.
 int clearInputBuffer(App *self, int unused) {
   self->index = 0;
   return 0;
 }
 
+// Appends a character to the input buffer. If buffer is full, does nothing.
 int appendToBuffer(App *self, int c) {
   if (self->index >= INPUT_BUFFER_SIZE) {
     self->index = INPUT_BUFFER_SIZE;
@@ -486,6 +491,7 @@ int appendToBuffer(App *self, int c) {
   return 0;
 }
 
+// Parses the input buffer as an integer and returns it.
 int parseBufferAsInt(App *self) {
   char strBuf[INPUT_BUFFER_SIZE + 1];
   for (int i = 0; i < self->index; i++) {
@@ -501,6 +507,8 @@ int parseBufferAsInt(App *self) {
  * ==========================================================================
  */
 
+// Attempts to registera nodeId in the set of known nodes. If the nodeId is
+// already registered does nothing.
 int registerNode(App *self, int nodeId) {
   for (int i = 0; i < NODES_SIZE; i++) {
     if (self->nodes[i] == nodeId) {
@@ -516,6 +524,8 @@ int registerNode(App *self, int nodeId) {
   return 0;
 }
 
+// Attempts to delete a node from the registered nodes. If the node is not
+// found, does nothing.
 int deleteNode(App *self, int nodeId) {
   for (int i = 0; i < NODES_SIZE; i++) {
     if (self->nodes[i] == nodeId) {
@@ -527,6 +537,11 @@ int deleteNode(App *self, int nodeId) {
   return 0;
 }
 
+// Returns the order of a given nodeId among the registered nodes, starting from
+// 0. E.g. if nodes 2, 5 and 9 are registered, getNodeOrder(5) will return 1,
+// since node 5 is the second lowest nodeId among the registered nodes.
+// getNodeOrder(2) would return 0 and getNodeOrder(9) would return 2.
+// If the nodeId is not registered, returns -1.
 int getNodeOrder(App *self, int nodeId) {
   int size = sizeof(self->nodes) / sizeof(self->nodes[0]);
   qsort(self->nodes, size, sizeof(self->nodes[0]), compare);
@@ -542,6 +557,7 @@ int getNodeOrder(App *self, int nodeId) {
   return -1;
 }
 
+// Returns the number of nodes known to the current node including itself.
 int getRegisteredNodeCount(App *self, int unused) {
   int count = 0;
   for (int i = 0; i < NODES_SIZE; i++) {
@@ -552,12 +568,15 @@ int getRegisteredNodeCount(App *self, int unused) {
   return count;
 }
 
-int shouldPlayNote(App *self, int nodeNote) {
+// Determines wether we should play a given note based on our rank and the
+// amount of nodes.
+int shouldPlayNote(App *self, int note) {
   int order = getNodeOrder(self, NODE_ID);
   int nodes = getRegisteredNodeCount(self, NODE_ID);
-  return order == nodeNote % nodes;
+  return order == note % nodes;
 }
 
+// Returns the nodeId of the node that is expected to play a given note.
 int getExpectedNodeForNote(App *self, int note) {
   int nodeCount = getRegisteredNodeCount(self, NODE_ID);
   if (nodeCount == 0) {
@@ -577,24 +596,27 @@ int getExpectedNodeForNote(App *self, int note) {
  * ==========================================================================
  */
 
+// Toggles led on/off. 1 is off, 0 is on.
 int toggleLed(App *self, int UNUSED) {
   SIO_TOGGLE(&sio0);
   return 0;
 }
 
+// Toggles led to mute state.
 int toggleLedMute(App *self, int UNUSED) {
-  if (hasConductorRole(self, 0))
+  if (self->conductor)
     return 0;
   int muted = SYNC(&toneGenerator, toggleMuteState, NULL);
   SIO_WRITE(&sio0, muted);
   return 0;
 }
 
+// Schedules appropriate LED toggles for a given note.
 int scheduleLedToggle(App *self, int melodyIndex) {
   // noteDuration is in microseconds
   int noteDuration = SYNC(&musicPlayer, getNoteDuration, melodyIndex);
   int rawDuration = SYNC(&musicPlayer, getRawDuration, melodyIndex);
-  if (!hasConductorRole(self, 0))
+  if (!self->conductor)
     return 0;
 
   int numToggles = 8 / rawDuration;
@@ -611,6 +633,8 @@ int scheduleLedToggle(App *self, int melodyIndex) {
  * ==========================================================================
  */
 
+// Schedules a pulse task every 100ms to send heartbeats and notify the
+// watchdog.
 int pulse(App *self, int UNUSED) {
   if (!self->sendingHeartbeats || self->failed)
     return 0;
@@ -620,6 +644,7 @@ int pulse(App *self, int UNUSED) {
   return 0;
 }
 
+// Stops the pulse tasks
 int stopPulse(App *self, int UNUSED) {
   if (!self->pulseTask)
     return 0;
@@ -634,6 +659,8 @@ int stopPulse(App *self, int UNUSED) {
  * ==========================================================================
  */
 
+// Toggles failure mode on and off. In failure mode, the node stops responding
+// to and sending messages.
 int failureMode(App *self, int UNUSED) {
   self->failed ^= 1;
   SIO_WRITE(&sio0, self->failed);
@@ -651,6 +678,7 @@ int failureMode(App *self, int UNUSED) {
   return 0;
 }
 
+// Runs if a ping is sent without getting a reply, starts playback
 int amiAlone(App *self, int UNUSED) {
   self->aloneTask = NULL;
   print("I am alone. Claiming conductor and starting playback.\n");
@@ -662,4 +690,23 @@ int amiAlone(App *self, int UNUSED) {
   SYNC(&musicPlayer, startPlayback, 0);
   ASYNC(self, sendNote, 0);
   return 1;
+}
+
+int enterRecoveryMode(App *self, int UNUSED) {
+  /* When in recovery mode, we don't want to send any can messages except for
+  discovery pings. We set failed to 1 to prevent responding to discovery pings
+  to ensure that we can recover using discovery ping -> exitRecoveryMode */
+  setConductorMode(self, 0);
+  self->currentConductor = 0;
+  ASYNC(&musicPlayer, stopPlayback, NULL);
+  ASYNC(&watchdog, stopWatchdog, NULL);
+  stopPulse(self, 0);
+  self->failed = 1;
+  // 1 means light off.
+  SIO_WRITE(&sio0, 1);
+  print("Entering recovery mode\n");
+  // Start sending discovery pings to find other nodes and recover
+  // Since this enters safeCanSend it will recurse.
+  AFTER(MSEC(100), self, sendPing, NULL);
+  return 0;
 }

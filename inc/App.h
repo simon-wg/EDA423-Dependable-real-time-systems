@@ -7,7 +7,7 @@
 #define INPUT_BUFFER_SIZE 10
 #define NODE_ID 1
 #define NODES_SIZE 3
-#define CLAIM_TIMEOUT_SEC 5
+#define CLAIM_TIMEOUT_MSEC 100
 
 typedef enum {
   MSG_COMMAND = 1,
@@ -86,7 +86,6 @@ int parseBufferAsInt(App *);
 int getNodeOrder(App *, int);
 int getRegisteredNodeCount(App *, int);
 int shouldPlayNote(App *, int);
-int hasConductorRole(App *, int);
 int isClaimTimedOut(App *, int);
 void setConductorMode(App *, int);
 
