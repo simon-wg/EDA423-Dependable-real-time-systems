@@ -108,6 +108,10 @@ int handleCanMessage(App *self, int unused) {
   case MSG_REPLY:
     print("Reply received from node %d\n", msg.nodeId);
     registerNode(self, msg.nodeId);
+    if (self->aloneTask) {
+      ABORT(self->aloneTask);
+      self->aloneTask = NULL;
+    }
     break;
 
   case MSG_CONDUCTOR:
@@ -418,6 +422,7 @@ int enterRecoveryMode(App *self, int UNUSED) {
   discovery pings. We set failed to 1 to prevent responding to discovery pings
   to ensure that we can recover using discovery ping -> exitRecoveryMode */
   setConductorMode(self, 0);
+  self->currentConductor = 0;
   ASYNC(&musicPlayer, stopPlayback, NULL);
   ASYNC(&watchdog, stopWatchdog, NULL);
   stopPulse(self, 0);
@@ -442,6 +447,7 @@ void setConductorMode(App *self, int conductor) {
 
   if (!self->conductor) {
     // Set light to the actual muted state when losing conductor status
+
     ASYNC(&musicPlayer, toggleLedMute, NULL);
     ASYNC(&musicPlayer, toggleLedMute, NULL);
   } else {
@@ -638,6 +644,22 @@ int failureMode(App *self, int UNUSED) {
       AFTER(SEC(7), self, failureMode, 0);
   } else {
     ASYNC(self, sendPing, NULL);
+    // Schedule to claim conductor and start melody if more than 500ms pass.
+    // Then abort that task if receive conductor claim.
+    self->aloneTask = AFTER(MSEC(500), self, amiAlone, NULL);
   }
   return 0;
+}
+
+int amiAlone(App *self, int UNUSED) {
+  self->aloneTask = NULL;
+  print("I am alone. Claiming conductor and starting playback.\n");
+  sendConductorClaim(self, 0);
+  sendStartCommand(self, 0);
+  SYNC(&musicPlayer, setTempoBpm, 120);
+  SYNC(&musicPlayer, setKeyOffset, 0);
+  sendResetCommand(self, 0);
+  SYNC(&musicPlayer, startPlayback, 0);
+  ASYNC(self, sendNote, 0);
+  return 1;
 }

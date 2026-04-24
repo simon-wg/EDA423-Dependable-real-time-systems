@@ -33,12 +33,13 @@ typedef struct {
   unsigned char currentConductor;
   unsigned char failed;
   unsigned char sendingHeartbeats;
-  Msg pulseTask;
   unsigned char nodes[NODES_SIZE];
   unsigned char failureMode;
+  Msg pulseTask;
+  Msg aloneTask;
 } App;
 
-#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, NULL, {NODE_ID, 0, 0}, 0}
+#define initApp() {initObject(), initTimer(), initTimer(), {0}, 0, 0, 0, 0, 0, {NODE_ID, 0, 0}, 0, NULL, NULL}
 
 /*
  * App Class Methods
@@ -74,6 +75,7 @@ int pulse(App *, int);
 int stopPulse(App *, int);
 int failureMode(App *, int);
 int enterRecoveryMode(App *, int);
+int amiAlone(App *, int);
 
 /*
  * Helper Functions
