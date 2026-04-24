@@ -16,6 +16,7 @@ typedef enum {
   MSG_CONDUCTOR = 4,
   MSG_NOTE = 5,
   MSG_HEARTBEAT = 6,
+  MSG_NODE_FAILURE = 7,
 } MessageType;
 
 /*
@@ -56,9 +57,10 @@ int sendResetCommand(App *, int);
 int sendPing(App *, int);
 int sendReply(App *, int);
 int sendHeartbeat(App *, int);
+int sendNote(App *, int);
+int sendNodeFailure(App *, int);
 int sendConductorClaim(App *, int);
 int getCurrentConductor(App *, int);
-int sendNote(App *, int);
 int handleNote(App *, int);
 int registerNode(App *, int);
 int deleteNode(App *, int);

@@ -117,17 +117,16 @@ int handleCanMessage(App *self, int unused) {
 
   case MSG_NOTE:
     ASYNC(self, handleNote, msg.buff[0]);
-    if (msg.length > 1) {
-      int failedNode = msg.buff[1];
-      if (failedNode) {
-        if (failedNode == NODE_ID) {
-          ASYNC(self, sendPing, NULL);
-        } else {
-          ASYNC(self, deleteNode, failedNode);
-        }
+    break;
+
+  case MSG_NODE_FAILURE:
+    if (msg.buff[0]) {
+      if (msg.buff[0] == NODE_ID) {
+        ASYNC(self, sendPing, NULL);
+      } else {
+        ASYNC(self, deleteNode, msg.buff[0]);
       }
     }
-
     break;
 
   case MSG_HEARTBEAT:
@@ -350,17 +349,24 @@ int sendConductorClaim(App *self, int unused) {
   return 0;
 }
 
-int sendNote(App *self, int failedNodeAndNote) {
-  int failedNode = (failedNodeAndNote >> 8) & 0xFF;
-  int note = failedNodeAndNote & 0xFF;
+int sendNote(App *self, int noteIdx) {
   if (self->failed)
     return 0;
-  handleNote(self, note);
+  handleNote(self, noteIdx);
   CANMsg msg;
-  msg.buff[0] = note;
-  msg.buff[1] = failedNode;
-  msg.length = 2;
+  msg.buff[0] = noteIdx;
+  msg.length = 1;
   msg.msgId = MSG_NOTE;
+  msg.nodeId = NODE_ID;
+  safeCanSend(self, &msg);
+  return 0;
+}
+
+int sendNodeFailure(App *self, int nodeId) {
+  CANMsg msg;
+  msg.buff[0] = nodeId;
+  msg.length = 1;
+  msg.msgId = MSG_NODE_FAILURE;
   msg.nodeId = NODE_ID;
   safeCanSend(self, &msg);
   return 0;

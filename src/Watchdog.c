@@ -34,14 +34,15 @@ int checkTimeout(Watchdog *self, int unused) {
     print("Node %d failed to send heartbeat in time. Assuming failure.\n",
           self->currentNode);
     SYNC(&app, deleteNode, self->currentNode);
-    T_RESET(&self->heartBeatTimer);
 
     int currentConductor = SYNC(&app, getCurrentConductor, NULL);
     if (self->currentNode == currentConductor) {
       ASYNC(&app, sendConductorClaim, NULL);
     }
 
-    ASYNC(&app, sendNote, self->currentNote | (self->currentNode << 8));
+    ASYNC(&app, sendNodeFailure, self->currentNode);
+    ASYNC(&app, sendNote, self->currentNote);
+    self->checkTimeoutTask = NULL;
     return 0;
   }
   self->checkTimeoutTask = AFTER(MSEC(100), self, checkTimeout, NULL);
