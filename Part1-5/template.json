@@ -1,0 +1,8 @@
+{
+  "label":"MD407 RTS project",
+  "description":"MD407 C project with TinyTimber",
+  "openOnStartup" : [
+    "src/App.c"
+  ],
+  "moveCaretTo" : [1, 1]
+}

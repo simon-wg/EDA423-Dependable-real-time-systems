@@ -1,0 +1,13 @@
+| We removed Node 3 while Node 2 was playing the note it was supposed to due to
+| receiving the TOKEN before registering all nodes in our internal network state.
+
+
+
+
+| Look into the conversion char -> int_8 -> int
+- The issue is can sends unsigned chars.
+- When we get 1111 1111 1111 1010 we initially interpret it as 250.
+- Then we need to explicitly interpret it as a signed char instead, before
+  passing it as an int.
+- When extending an unsigned char to int, we just add 0s in front. When
+  extending a signed char, we add 1s in front.
