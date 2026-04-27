@@ -63,6 +63,7 @@ int initialize(App *self, int arg) {
   SIO_INIT(&sio0);
   ASYNC(self, registerNode, NODE_ID);
   print("Hello world!\n");
+  ASYNC(self, sendPing, NULL);
   return 0;
 }
 
@@ -124,10 +125,12 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_NOTE:
+    SYNC(&musicPlayer, startPlayback, NULL);
     ASYNC(self, handleNote, msg.buff[0]);
     break;
 
   case MSG_NODE_FAILURE:
+    print("Node %d failed\n", msg.buff[0]);
     if (msg.buff[0]) {
       if (msg.buff[0] == NODE_ID) {
         ASYNC(self, sendPing, NULL);
@@ -138,6 +141,7 @@ int handleCanMessage(App *self, int unused) {
     break;
 
   case MSG_HEARTBEAT:
+    print("Heartbeat received from node %d\n", msg.nodeId);
     ASYNC(&watchdog, notifyWatchdog, msg.nodeId);
     break;
 
@@ -374,7 +378,7 @@ int sendConductorClaim(App *self, int unused) {
 
 // Sends a note for others to play.
 int sendNote(App *self, int noteIdx) {
-  if (self->failed)
+  if (self->failed || !SYNC(&musicPlayer, getPlayingState, NULL))
     return 0;
   handleNote(self, noteIdx);
   CANMsg msg;
