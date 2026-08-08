@@ -47,20 +47,22 @@ int receiver(App *self, int unused) {
 }
 
 int handleCanMessage(App *self, int unused) {
+  int currentSeconds = SEC_OF(T_SAMPLE(&self->systemTime));
+  int currentMillis = MSEC_OF(T_SAMPLE(&self->systemTime));
   if (self->receiverHead == self->receiverTail) {
     self->ready = 1;
     return 0;
   }
-  print("Handling msg with ID %d\n", self->recieverBuff[self->receiverHead]);
+  print("Delivering msg with ID %d ", self->recieverBuff[self->receiverHead]);
+  print("at %ds %dms\n", currentSeconds, currentMillis);
   self->receiverHead = (self->receiverHead + 1) % RECIEVER_BUFFER_SIZE;
   AFTER(self->delta, self, handleCanMessage, 0);
   return 0;
 }
 
 void addMsgToBuffer(App *self, char msgId) {
-  if (self->receiverTail + 1 % RECIEVER_BUFFER_SIZE == self->receiverHead) {
+  if ((self->receiverTail + 1) % RECIEVER_BUFFER_SIZE == self->receiverHead) {
     print("Buffer overflow! Message with ID %d was dropped.\n", msgId);
-    self->canSeqNo--;
     return;
   }
 
@@ -123,7 +125,7 @@ int processSerialCommand(App *self, int c) {
 
 int canBurst(App *self, int unused) {
   sendCanMessage(self, 0);
-  self->burstTask = AFTER(MSEC(50), self, canBurst, 0);
+  self->burstTask = AFTER(MSEC(500), self, canBurst, 0);
   return 0;
 }
 
@@ -138,8 +140,11 @@ int stopBurstTask(App *self, int unused) {
 // Sends a message to set status to playing.
 int sendCanMessage(App *self, int unused) {
   CANMsg msg;
+  int currentSeconds = SEC_OF(T_SAMPLE(&self->systemTime));
+  int currentMillis = MSEC_OF(T_SAMPLE(&self->systemTime));
   msg.msgId = self->canSeqNo;
-  debug(self->debug, "Sending msg with ID %d\n", self->canSeqNo);
+  debug(self->debug, "Received msg with ID %d at %ds %dms\n", self->canSeqNo,
+        currentSeconds, currentMillis);
   self->canSeqNo = (self->canSeqNo + 1) % MAX_SEQ_NO;
   msg.nodeId = NODE_ID;
   msg.length = 1;

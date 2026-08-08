@@ -2,7 +2,6 @@
 #define _APP_H
 
 #include "TinyTimber.h"
-#include "canTinyTimber.h"
 #include <stdint.h>
 
 #define RECIEVER_BUFFER_SIZE 10
@@ -15,6 +14,7 @@
 
 typedef struct {
   Object super;
+  Timer systemTime;
   Timer lastDeliveryTime;
   Time delta;
   uint8_t recieverBuff[RECIEVER_BUFFER_SIZE];
@@ -26,7 +26,7 @@ typedef struct {
   Msg burstTask;
 } App;
 
-#define initApp() {initObject(), initTimer(), SEC(1), {NULL}, 0, 0, 1, 0, 0, NULL}
+#define initApp() {initObject(), initTimer(), initTimer(), SEC(1), {NULL}, 0, 0, 1, 0, 0, NULL}
 
 /*
  * App Class Methods

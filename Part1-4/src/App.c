@@ -430,7 +430,7 @@ int safeCanSend(App *self, CANMsg *msg) {
     // If conductor keep going.
     // According to Problem 3 we should just keep playing if conductor in a 2
     // board setup.
-    if (self->conductor && getRegisteredNodeCount(self, 0) > 2)
+    if (self->conductor && getRegisteredNodeCount(self, 0) < 3)
       return 1;
     ASYNC(self, enterRecoveryMode, NULL);
   }
